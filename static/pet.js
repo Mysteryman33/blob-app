@@ -729,6 +729,7 @@ const CONTENT_CONFIGS = {
 const fieldWrap = el => el.closest('.field-with-mic') || el;
 
 function openContentModal(type) {
+  if (type === 'journal') { openJournalModal(); return; }   // journal = dedicated voice-first flow
   const cfg = CONTENT_CONFIGS[type];
   if (!cfg) return;
   contentModalType = type;
@@ -776,8 +777,8 @@ const moodById = id => MOODS.find(m => m.id === id);
 let selectedMood = '';
 let _pendingPrompt = null;
 
-function renderMoodPicker(show) {
-  const picker = document.getElementById('moodPicker');
+function renderMoodPicker(show, pickerId = 'moodPicker') {
+  const picker = document.getElementById(pickerId);
   if (!picker) return;
   selectedMood = '';
   if (!show) { picker.classList.add('hidden'); picker.innerHTML = ''; return; }
@@ -1783,8 +1784,10 @@ async function loadNavigation() {
       const interval = showNavLoading();
       try {
         const analyzeRes = await fetch('/api/navigation/analyze', { method: 'POST' });
-        navData = await analyzeRes.json();
-      } catch(e) { console.error('analyze failed', e); }
+        const result = await analyzeRes.json();
+        if (analyzeRes.ok && result.identity) navData = result;
+        else showToast('AI analysis failed — tap "analyze with AI" to retry');
+      } catch(e) { console.error('analyze failed', e); showToast('analysis failed, try again'); }
       clearInterval(interval);
       document.getElementById('navTabs').style.display = '';
     }
@@ -1795,9 +1798,11 @@ async function loadNavigation() {
 async function reAnalyzeNavigation() {
   const interval = showNavLoading();
   try {
-    const res = await fetch('/api/navigation/analyze', { method: 'POST' });
-    navData   = await res.json();
-  } catch(e) { console.error(e); }
+    const res    = await fetch('/api/navigation/analyze', { method: 'POST' });
+    const result = await res.json();
+    if (res.ok && result.identity) navData = result;
+    else showToast('AI analysis failed, try again');
+  } catch(e) { console.error(e); showToast('analysis failed, try again'); }
   clearInterval(interval);
   document.getElementById('navTabs').style.display = '';
   renderNavTab();
@@ -2098,6 +2103,113 @@ document.getElementById('journalList').addEventListener('click', async e => {
   if (!btn) return;
   await fetch(`/api/journal/${btn.dataset.delJournal}`, { method:'DELETE' });
   loadJournal();
+});
+
+// ── Voice Journal (speech-first entry) ──────────────────────────────────────
+const journalModal = document.getElementById('journalModal');
+const jvMic    = document.getElementById('jvMic');
+const jvStatus = document.getElementById('jvStatus');
+const jvText   = document.getElementById('jvText');
+const jvPrompt = document.getElementById('jvPrompt');
+const JV_SR    = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+let jvRec = null, jvListening = false, jvCommitted = '', jvManualStop = false;
+
+function openJournalModal() {
+  jvText.value = '';
+  jvCommitted = '';
+  jvPrompt.textContent = _pendingPrompt || document.getElementById('journalPromptText')?.textContent || 'how are you feeling right now?';
+  _pendingPrompt = null;
+  renderMoodPicker(true, 'jvMoodPicker');
+
+  if (!JV_SR) {
+    // No speech support — fall back to typing, hide the mic UI.
+    jvMic.style.display = 'none';
+    jvStatus.textContent = 'type your entry below';
+  } else {
+    jvMic.style.display = '';
+    jvStatus.textContent = 'tap to speak your entry';
+  }
+
+  journalModal.classList.remove('hidden');
+  // Auto-start dictation so journaling is voice-first
+  if (JV_SR) setTimeout(jvStart, 250);
+  else setTimeout(() => jvText.focus(), 60);
+}
+
+function closeJournalModal() {
+  jvStopListening(true);
+  journalModal.classList.add('hidden');
+  jvText.value = '';
+  jvCommitted = '';
+}
+
+function jvSetListening(on) {
+  jvListening = on;
+  jvMic.classList.toggle('listening', on);
+  jvStatus.textContent = on ? 'listening… tap mic to stop' : 'tap to speak your entry';
+}
+
+function jvStart() {
+  if (!JV_SR || jvListening) return;
+  jvRec = new JV_SR();
+  jvRec.lang = 'en-US';
+  jvRec.continuous = true;       // keep listening for long, rambling entries
+  jvRec.interimResults = true;
+  jvCommitted = jvText.value.trim();
+  jvManualStop = false;
+
+  jvRec.onstart = () => jvSetListening(true);
+  jvRec.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const tr = e.results[i][0].transcript;
+      if (e.results[i].isFinal) jvCommitted = (jvCommitted ? jvCommitted + ' ' : '') + tr.trim();
+      else interim += tr;
+    }
+    jvText.value = (jvCommitted + (interim ? ' ' + interim : '')).trim();
+    jvText.scrollTop = jvText.scrollHeight;
+  };
+  jvRec.onerror = ev => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { jvManualStop = true; jvStatus.textContent = 'mic blocked — type instead'; } };
+  jvRec.onend = () => {
+    // Browsers stop on silence; auto-restart unless the user stopped it.
+    if (jvListening && !jvManualStop) { try { jvRec.start(); return; } catch (_) {} }
+    jvSetListening(false);
+  };
+  try { jvRec.start(); } catch (_) {}
+}
+
+function jvStopListening(silent) {
+  jvManualStop = true;
+  const wasListening = jvListening;
+  jvListening = false;
+  if (jvRec) { try { jvRec.stop(); } catch (_) {} }
+  jvMic.classList.remove('listening');
+  if (!silent) jvStatus.textContent = wasListening ? 'tap to speak more' : 'tap to speak your entry';
+}
+
+jvMic?.addEventListener('click', () => { jvListening ? jvStopListening(false) : jvStart(); });
+document.getElementById('closeJournalModal')?.addEventListener('click', closeJournalModal);
+document.getElementById('cancelJournalModal')?.addEventListener('click', closeJournalModal);
+journalModal?.addEventListener('click', e => { if (e.target === journalModal) closeJournalModal(); });
+
+document.getElementById('journalForm')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const text = jvText.value.trim();
+  if (!text) { jvStatus.textContent = 'say or type something first'; return; }
+  const mood = selectedMood;
+  jvStopListening(true);
+  try {
+    await fetch('/api/journal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, mood })
+    });
+    journalModal.classList.add('hidden');
+    addNotif('journal_added', 'journal entry added');
+    react('journal_write');
+    loadJournal();
+    fetchJournalReflection(text, mood);
+  } catch (_) {}
 });
 
 // ── Chat ──────────────────────────────────────────────────────────────────────

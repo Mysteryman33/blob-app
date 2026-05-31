@@ -34,6 +34,25 @@ _FAILED_GEN_RE = re.compile(
 def _clean(text: str) -> str:
     return _RAW_TOOL_RE.sub('', text).strip().strip('"').strip("'")
 
+def _extract_json_object(raw: str):
+    """Best-effort parse of a JSON object from a model reply that may include
+    markdown fences or surrounding reasoning text. Returns dict or raises."""
+    s = (raw or '').strip()
+    if s.startswith('```'):                       # strip a ```json ... ``` fence
+        s = s.split('```', 2)[1] if s.count('```') >= 2 else s.lstrip('`')
+        if s.lower().startswith('json'):
+            s = s[4:]
+    s = s.strip().strip('`').strip()
+    try:
+        return json.loads(s)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Fall back to the outermost {...} span (handles leading/trailing prose)
+    start, end = s.find('{'), s.rfind('}')
+    if start != -1 and end > start:
+        return json.loads(s[start:end + 1])
+    raise ValueError('no JSON object found')
+
 def _parse_failed_generation(text: str):
     """Extract every (tool_name, args_dict) from Groq's failed_generation string.
 
@@ -1596,28 +1615,32 @@ Rules:
 - growth_mindset = variety of goals + new habits tried
 - Be specific to THIS user's data, not generic"""
 
+    # JSON mode + low reasoning effort keeps this fast and parseable. gpt-oss is a
+    # reasoning model: without these it burns the token budget "thinking" and returns
+    # truncated/prose-wrapped output that fails to parse, so the page does nothing.
+    base_kwargs = dict(
+        model='openai/gpt-oss-20b',
+        messages=[
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user',   'content': data_summary},
+        ],
+        temperature=0.6,
+        max_completion_tokens=2000,
+        stream=False,
+        response_format={'type': 'json_object'},
+        reasoning_effort='low',
+    )
     try:
         client = _groq()
-        resp = client.chat.completions.create(
-            model='openai/gpt-oss-20b',
-            messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user',   'content': data_summary},
-            ],
-            temperature=0.7,
-            max_completion_tokens=900,
-            stream=False,
-        )
+        try:
+            resp = client.chat.completions.create(**base_kwargs)
+        except Exception:
+            # Older/other models may reject the extra kwargs — retry without them.
+            base_kwargs.pop('response_format', None)
+            base_kwargs.pop('reasoning_effort', None)
+            resp = client.chat.completions.create(**base_kwargs)
         log_usage(resp, 'navigation_analyze')
-        raw = resp.choices[0].message.content or ''
-        # Strip any markdown fences
-        raw = raw.strip()
-        if raw.startswith('```'):
-            raw = raw.split('```')[1]
-            if raw.startswith('json'):
-                raw = raw[4:]
-        raw = raw.strip().rstrip('`').strip()
-        profile = json.loads(raw)
+        profile = _extract_json_object(resp.choices[0].message.content or '')
     except Exception as exc:
         log.error('Navigation analyze error: %s', exc)
         return jsonify(error='AI analysis failed, try again'), 500

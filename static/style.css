@@ -4534,3 +4534,58 @@ body {
   border: 1px solid color-mix(in srgb, var(--mood) 40%, transparent);
   letter-spacing: 0.02em;
 }
+
+/* ── Voice journal modal (speech-first) ── */
+.journal-modal { text-align: center; }
+.jv-prompt {
+  font-size: 0.92rem; color: var(--text);
+  line-height: 1.4; margin: 2px 4px 4px;
+}
+.jv-mic {
+  position: relative;
+  width: 84px; height: 84px;
+  margin: 6px auto 0;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(150deg, #8b5cf6, #6d28d9);
+  color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 22px rgba(124,58,237,0.45);
+  transition: transform 0.15s, background 0.2s, box-shadow 0.2s;
+}
+.jv-mic:hover { transform: scale(1.04); }
+.jv-mic:active { transform: scale(0.97); }
+.jv-mic-rings { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+.jv-mic.listening {
+  background: linear-gradient(150deg, #f87171, #ef4444);
+  box-shadow: 0 6px 22px rgba(239,68,68,0.5);
+}
+.jv-mic.listening .jv-mic-rings {
+  animation: jvRing 1.4s ease-out infinite;
+  box-shadow: 0 0 0 0 rgba(239,68,68,0.55);
+}
+@keyframes jvRing {
+  0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+  100% { box-shadow: 0 0 0 22px rgba(239,68,68,0); }
+}
+.jv-status {
+  font-size: 0.72rem; color: var(--text-sub);
+  margin: 10px 0 2px; letter-spacing: 0.02em;
+}
+.jv-text {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 12px 13px;
+  color: var(--text); font: inherit; font-size: 0.86rem;
+  line-height: 1.5; outline: none; resize: none;
+  text-align: left;
+  transition: border-color 0.2s;
+}
+.jv-text::placeholder { color: var(--text-sub); }
+.jv-text:focus { border-color: rgba(255,255,255,0.3); }
+.jv-mood-label {
+  font-size: 0.66rem; color: var(--text-sub);
+  text-align: left; margin: 2px 2px -2px; letter-spacing: 0.03em;
+}

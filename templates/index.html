@@ -1306,6 +1306,35 @@
     </div>
   </div>
 
+  <!-- Voice Journal Modal (speech-first) -->
+  <div class="modal-overlay hidden" id="journalModal">
+    <div class="modal journal-modal">
+      <div class="modal-header">
+        <h3>new entry</h3>
+        <button class="modal-close" id="closeJournalModal">✕</button>
+      </div>
+      <form id="journalForm">
+        <div class="jv-prompt" id="jvPrompt">how are you feeling right now?</div>
+
+        <button type="button" class="jv-mic" id="jvMic" aria-label="Tap to speak">
+          <span class="jv-mic-rings"></span>
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        </button>
+        <div class="jv-status" id="jvStatus">tap to speak your entry</div>
+
+        <textarea id="jvText" class="jv-text" placeholder="…or type it here" rows="4" maxlength="800"></textarea>
+
+        <div class="jv-mood-label">how are you feeling?</div>
+        <div class="mood-picker" id="jvMoodPicker"></div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="cancelJournalModal">cancel</button>
+          <button type="submit" class="btn-primary">save entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div class="toast hidden" id="toast"></div>
 
