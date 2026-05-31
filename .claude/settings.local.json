@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(python -c \"from flask import Flask; from groq import Groq; print\\('imports ok'\\)\")",
+      "Bash(pip3 --version)",
+      "Bash(pip3 install *)",
+      "Bash(python3 -c \"import groq; print\\('groq ok'\\)\")",
+      "Bash(python -c \"import groq; print\\('groq ok'\\)\")",
+      "Bash(python3 main.py)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(python3 *)",
+      "WebSearch",
+      "Bash(node *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(curl -s http://localhost:5000/static/pet.js)",
+      "Bash(curl -s http://127.0.0.1:5001/static/pet.js)",
+      "Bash(pip3 show *)",
+      "Bash(/usr/local/bin/python3.14 *)",
+      "Bash(curl -s http://127.0.0.1:5002/)",
+      "Bash(curl -s http://127.0.0.1:5002/static/pet.js)",
+      "Bash(curl -s \"http://127.0.0.1:5002/static/pet.js\")",
+      "Bash(curl -s -H \"Cache-Control: no-cache\" \"http://127.0.0.1:5002/static/pet.js\")",
+      "Bash(git -C \"/Users/aravbangur/Library/CloudStorage/OneDrive-Personal/Documents/Arav/Coding/Python/xdhaclks\" status)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}

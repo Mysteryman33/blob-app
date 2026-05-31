@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>your little blob</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="app-bg">
+    <div class="phone">
+      <canvas id="weatherCanvas"></canvas>
+
+      <!-- ══════════════ SCREEN: HOME ══════════════ -->
+      <div class="screen active" id="screen-home">
+
+        <!-- Greeting header -->
+        <div class="home-header">
+          <div class="home-greeting-wrap">
+            <span class="home-greeting" id="homeGreeting">good morning</span>
+            <span class="home-date" id="homeDate">today</span>
+          </div>
+          <button class="icon-btn" id="bellBtn" aria-label="Notifications">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span class="notif-badge hidden" id="notifBadge"></span>
+          </button>
+        </div>
+
+        <!-- Speech bubble -->
+        <div class="speech-bubble" id="speechBubble">
+          <span id="speech">...</span>
+        </div>
+
+        <!-- Today's tasks card -->
+        <div class="card home-today-card">
+          <div class="home-today-head">
+            <div>
+              <div class="home-section-label">today's tasks</div>
+            </div>
+            <div class="home-ring-wrap">
+              <svg width="56" height="56" viewBox="0 0 56 56">
+                <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="4.5"/>
+                <circle id="homeProgressArc" cx="28" cy="28" r="22" fill="none"
+                        stroke="url(#homeRingGrad)" stroke-width="4.5" stroke-linecap="round"
+                        stroke-dasharray="138.2" stroke-dashoffset="138.2"
+                        transform="rotate(-90 28 28)"
+                        style="transition: stroke-dashoffset 0.55s cubic-bezier(.4,0,.2,1)"/>
+                <defs>
+                  <linearGradient id="homeRingGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#7c3aed"/>
+                    <stop offset="100%" stop-color="#a78bfa"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div class="home-ring-text">
+                <span id="homeTasksDone">0</span><span class="home-ring-sep">/</span><span id="homeTasksTotal">0</span>
+              </div>
+            </div>
+          </div>
+          <ul class="task-list" id="taskList">
+            <li class="empty-state">no tasks yet — add one!</li>
+          </ul>
+          <span id="taskCount" style="display:none"></span>
+        </div>
+
+        <!-- Stats strip -->
+        <div class="card home-stats">
+          <div class="home-stat-item">
+            <svg class="home-stat-icon" width="16" height="16" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="6" stroke="#f59e0b" stroke-width="1.5"/>
+              <circle cx="7" cy="7" r="2.2" fill="#f59e0b"/>
+            </svg>
+            <span class="home-stat-num" id="statCoins">0</span>
+            <span class="home-stat-lbl">coins</span>
+          </div>
+          <div class="home-stat-div"></div>
+          <div class="home-stat-item">
+            <svg class="home-stat-icon" width="13" height="17" viewBox="0 0 13 17" fill="#f97316">
+              <path d="M6.5 0C6.5 0 10 5 10 8.5C10 10.4 8.4 12 6.5 12C4.6 12 3 10.4 3 8.5C3 6.8 3.8 5.5 3.8 5.5C3.8 5.5 4.3 6.8 5.5 6.8C5.5 6.8 4.8 4.8 6.5 0Z"/>
+              <path d="M3.5 12C1.8 13 1 14.8 2 17C2 17 3.8 15.2 6.5 15.2C9.2 15.2 11 17 11 17C12 14.8 11.2 13 9.5 12" opacity="0.5"/>
+            </svg>
+            <span class="home-stat-num" id="statStreak">0</span>
+            <span class="home-stat-lbl">streak</span>
+          </div>
+          <div class="home-stat-div"></div>
+          <div class="home-stat-item">
+            <svg class="home-stat-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            <span class="home-stat-num" id="statLevel">1</span>
+            <span class="home-stat-lbl">level</span>
+          </div>
+        </div>
+
+        <!-- Bottom grid: habits + goal -->
+        <div class="home-bottom">
+          <div class="card home-mini" id="homeHabitCard">
+            <div class="home-mini-head">
+              <svg width="12" height="15" viewBox="0 0 13 17" fill="#f97316">
+                <path d="M6.5 0C6.5 0 10 5 10 8.5C10 10.4 8.4 12 6.5 12C4.6 12 3 10.4 3 8.5C3 6.8 3.8 5.5 3.8 5.5C3.8 5.5 4.3 6.8 5.5 6.8C5.5 6.8 4.8 4.8 6.5 0Z"/>
+                <path d="M3.5 12C1.8 13 1 14.8 2 17C2 17 3.8 15.2 6.5 15.2C9.2 15.2 11 17 11 17C12 14.8 11.2 13 9.5 12" opacity="0.5"/>
+              </svg>
+              <span>habits</span>
+            </div>
+            <div class="home-mini-big" id="homeHabitsDone">–</div>
+            <div class="home-mini-sublabel" id="homeHabitsLabel">today</div>
+            <div class="home-week-dots" id="homeWeekDots"></div>
+          </div>
+          <div class="card home-mini" id="homeGoalCard">
+            <div class="home-mini-head">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="#7c3aed" stroke="none"/>
+              </svg>
+              <span>top goal</span>
+            </div>
+            <div class="home-mini-goal-title" id="homeGoalTitle">no goals yet</div>
+            <div class="home-mini-bar-row">
+              <div class="home-mini-bar"><div class="home-mini-fill" id="homeGoalFill" style="width:0%"></div></div>
+              <span class="home-mini-pct" id="homeGoalPct">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feed button -->
+        <button class="home-feed-btn" id="feedBtn">
+          <span class="home-feed-left">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+            feed your blob
+          </span>
+          <span class="home-feed-cost">
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="6" stroke="#f59e0b" stroke-width="1.5"/>
+              <circle cx="7" cy="7" r="2.2" fill="#f59e0b"/>
+            </svg>
+            <span id="feedCoinAmt">0</span>
+          </span>
+        </button>
+
+      </div>
+
+      <!-- ══════════════ SCREEN: ADD ══════════════ -->
+      <div class="screen" id="screen-add">
+
+        <div class="add-header">
+          <div class="add-header-sparkles">
+            <svg width="28" height="28" viewBox="0 0 32 32" fill="white" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 4l1.2 3.6L25 9l-3.8 1.4L20 14l-1.2-3.6L15 9l3.8-1.4z" opacity="0.9"/>
+              <path d="M10 2l.8 2.4L13 6l-2.2.8L10 9l-.8-2.2L7 6l2.2-.8z" opacity="0.6"/>
+            </svg>
+          </div>
+          <h2 class="add-header-title">Add</h2>
+          <p class="add-header-sub">Choose what you want to add</p>
+        </div>
+
+        <div class="add-grid">
+
+          <!-- Task -->
+          <button class="add-tile add-cell" data-type="task">
+            <svg class="add-tile-bg" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 130 Q50 90 80 80 Q110 70 130 40 L135 45 L130 35 L140 38" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M130 35 L126 28 L136 30 Z" fill="rgba(255,255,255,0.15)"/>
+              <circle cx="130" cy="35" r="3" fill="rgba(255,255,255,0.3)"/>
+            </svg>
+            <div class="add-tile-icon-wrap" style="background:rgba(255,255,255,0.18)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3"/>
+                <polyline points="9 12 11 14 15 10"/>
+              </svg>
+            </div>
+            <div class="add-tile-text">
+              <span class="add-tile-title">Task</span>
+              <span class="add-tile-sub">Get things done</span>
+            </div>
+            <div class="add-tile-arrow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </div>
+          </button>
+
+          <!-- Focus -->
+          <button class="add-tile add-cell" data-type="focus">
+            <svg class="add-tile-bg" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="130" cy="30" r="50" stroke="rgba(255,255,255,0.06)" stroke-width="1.5"/>
+              <circle cx="130" cy="30" r="70" stroke="rgba(255,255,255,0.04)" stroke-width="1.5"/>
+              <circle cx="130" cy="30" r="35" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            </svg>
+            <div class="add-tile-icon-wrap" style="background:rgba(255,255,255,0.18)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <div class="add-tile-text">
+              <span class="add-tile-title">Focus</span>
+              <span class="add-tile-sub">Deep work time</span>
+            </div>
+            <div class="add-tile-arrow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </div>
+          </button>
+
+          <!-- Goal -->
+          <button class="add-tile add-cell" data-type="goal">
+            <svg class="add-tile-bg" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 130 Q40 100 65 85 Q90 70 100 50 Q110 30 120 20" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M120 20 L116 12 L126 14 Z" fill="rgba(255,255,255,0.2)"/>
+              <line x1="121" y1="20" x2="121" y2="10" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+              <path d="M40 120 L60 95 L80 105 L100 75 L120 40" stroke="rgba(255,255,255,0.05)" stroke-width="8" stroke-linecap="round"/>
+            </svg>
+            <div class="add-tile-icon-wrap" style="background:rgba(255,255,255,0.18)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 22V17M4 17s0-2 4-2 5 2 8 2 4-2 4-2V5s0 2-4 2-5-2-8-2-4 2-4 2v12z"/>
+              </svg>
+            </div>
+            <div class="add-tile-text">
+              <span class="add-tile-title">Goal</span>
+              <span class="add-tile-sub">Plan for the future</span>
+            </div>
+            <div class="add-tile-arrow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </div>
+          </button>
+
+          <!-- Navigation -->
+          <button class="add-tile add-cell" data-type="navigation">
+            <svg class="add-tile-bg" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 120 Q40 100 60 80 Q80 60 100 70 Q120 80 140 40" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="4 3"/>
+              <circle cx="140" cy="38" r="5" fill="rgba(255,255,255,0.2)"/>
+              <path d="M140 38 L140 28 Q140 22 145 22 Q150 22 150 28 L150 38 Q148 45 140 50 Q132 45 130 38 L130 28 Q130 22 135 22 Q140 22 140 28" fill="rgba(255,255,255,0.15)"/>
+              <circle cx="80" cy="78" r="3" fill="rgba(255,255,255,0.1)"/>
+            </svg>
+            <div class="add-tile-icon-wrap" style="background:rgba(255,255,255,0.18)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+              </svg>
+            </div>
+            <div class="add-tile-text">
+              <span class="add-tile-title">Navigation</span>
+              <span class="add-tile-sub">Find your way</span>
+            </div>
+            <div class="add-tile-arrow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </div>
+          </button>
+
+          <!-- Habit -->
+          <button class="add-tile add-cell" data-type="habit">
+            <svg class="add-tile-bg" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="120" cy="100" r="28" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+              <circle cx="120" cy="100" r="48" stroke="rgba(255,255,255,0.05)" stroke-width="1.5"/>
+              <circle cx="120" cy="100" r="68" stroke="rgba(255,255,255,0.03)" stroke-width="1.5"/>
+            </svg>
+            <div class="add-tile-icon-wrap" style="background:rgba(255,255,255,0.18)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </div>
+            <div class="add-tile-text">
+              <span class="add-tile-title">Habit</span>
+              <span class="add-tile-sub">Build consistency</span>
+            </div>
+            <div class="add-tile-arrow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </div>
+          </button>
+
+          <!-- Journal -->
+          <button class="add-tile add-cell" data-type="journal">
+            <svg class="add-tile-bg" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="100" cy="95" rx="55" ry="35" fill="rgba(255,255,255,0.05)"/>
+              <ellipse cx="130" cy="80" rx="40" ry="28" fill="rgba(255,255,255,0.04)"/>
+              <ellipse cx="70" cy="110" rx="45" ry="25" fill="rgba(255,255,255,0.04)"/>
+            </svg>
+            <div class="add-tile-icon-wrap" style="background:rgba(255,255,255,0.18)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+            </div>
+            <div class="add-tile-text">
+              <span class="add-tile-title">Journal</span>
+              <span class="add-tile-sub">Reflect &amp; grow</span>
+            </div>
+            <div class="add-tile-arrow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </div>
+          </button>
+
+        </div>
+      </div>
+
+      <!-- ══════════════ SCREEN: HEART ══════════════ -->
+      <div class="screen" id="screen-heart">
+
+        <!-- Header -->
+        <div class="home-header">
+          <div class="home-greeting-wrap">
+            <span class="home-greeting">my blob</span>
+          </div>
+          <div class="heart-coins-display">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#f59e0b" stroke-width="1.5"/><circle cx="7" cy="7" r="2.2" fill="#f59e0b"/></svg>
+            <span id="heartCoinDisplay">0</span>
+          </div>
+        </div>
+
+        <!-- Blob Hero Stage -->
+        <div class="blob-hero-stage" id="blobHeroStage">
+          <div class="blob-hero-glow" id="blobHeroGlow"></div>
+
+          <!-- Large static preview blob -->
+          <div class="blob-hero-center">
+            <button class="blob blob-preview mood-happy" id="blobPreview" tabindex="-1" aria-hidden="true">
+              <svg class="blob-svg" viewBox="0 0 220 170" aria-hidden="true">
+                <path class="blob-body" d="M24 113C23 100 31 90 45 84C47 52 71 27 110 27C149 27 173 52 175 84C190 89 197 100 196 113C195 125 184 132 171 130C159 141 142 146 110 146C78 146 61 141 49 130C36 132 25 125 24 113Z"/>
+                <ellipse class="eye left" cx="95" cy="101" rx="7" ry="8"/>
+                <ellipse class="eye right" cx="125" cy="101" rx="7" ry="8"/>
+                <path class="eye-closed left" d="M88 103C93 108 98 108 102 103"/>
+                <path class="eye-closed right" d="M118 103C123 108 128 108 132 103"/>
+                <path class="brow left" d="M88 89C91 86 95 86 98 89"/>
+                <path class="brow right" d="M122 89C125 86 129 86 132 89"/>
+                <path class="mouth smile" d="M102 116C106 121 114 121 118 116"/>
+                <path class="mouth flat" d="M103 117H117"/>
+                <path class="mouth sad" d="M102 120C106 115 114 115 118 120"/>
+                <path class="mouth o" d="M109 113A4.5 4.5 0 1 0 109 122A4.5 4.5 0 1 0 109 113"/>
+                <ellipse class="blush left" cx="81" cy="112" rx="9" ry="4"/>
+                <ellipse class="blush right" cx="139" cy="112" rx="9" ry="4"/>
+                <path class="eye-x left"  d="M88 94L102 108 M102 94L88 108"/>
+                <path class="eye-x right" d="M118 94L132 108 M132 94L118 108"/>
+                <path class="star s1" d="M55 68L57 63L59 68L64 70L59 72L57 77L55 72L50 70Z"/>
+                <path class="star s2" d="M155 58L157 54L159 58L163 60L159 62L157 66L155 62L151 60Z"/>
+                <path class="star s3" d="M108 18L110 14L112 18L116 20L112 22L110 26L108 22L104 20Z"/>
+                <path class="eye-swirl left"  d="M96 101C96 97 92 94 89 96C86 99 87 104 90 106C94 109 100 107 101 103C102 98 99 93 94 92"/>
+                <path class="eye-swirl right" d="M124 101C124 97 128 94 131 96C134 99 133 104 130 106C126 109 120 107 119 103C118 98 121 93 126 92"/>
+                <!-- Accessories (JS-synced via prev-acc-* IDs) -->
+                <g id="prev-acc-sunglasses" display="none">
+                  <ellipse cx="88" cy="84" rx="18" ry="12" fill="rgba(10,5,30,0.72)" stroke="#4c1d95" stroke-width="2"/>
+                  <ellipse cx="132" cy="84" rx="18" ry="12" fill="rgba(10,5,30,0.72)" stroke="#4c1d95" stroke-width="2"/>
+                  <ellipse cx="88" cy="82" rx="10" ry="6" fill="#7c3aed" opacity="0.2"/>
+                  <ellipse cx="132" cy="82" rx="10" ry="6" fill="#7c3aed" opacity="0.2"/>
+                  <line x1="106" y1="84" x2="114" y2="84" stroke="#4c1d95" stroke-width="2.5"/>
+                  <line x1="70" y1="85" x2="58" y2="88" stroke="#4c1d95" stroke-width="2" stroke-linecap="round"/>
+                  <line x1="150" y1="85" x2="162" y2="88" stroke="#4c1d95" stroke-width="2" stroke-linecap="round"/>
+                </g>
+                <g id="prev-acc-party-hat" display="none">
+                  <polygon points="110,2 86,30 134,30" fill="#f97316" stroke="#c2410c" stroke-width="1.5"/>
+                  <polygon points="110,2 97,16 123,16" fill="#fb923c" opacity="0.6"/>
+                  <line x1="98" y1="19" x2="122" y2="19" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>
+                  <line x1="103" y1="10" x2="117" y2="10" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+                  <circle cx="110" cy="2" r="7" fill="#fbbf24"/>
+                  <circle cx="110" cy="2" r="4" fill="#f59e0b"/>
+                </g>
+                <g id="prev-acc-headphones" display="none">
+                  <path d="M48 76 Q110 16 172 76" fill="none" stroke="#1e1b4b" stroke-width="9" stroke-linecap="round"/>
+                  <path d="M48 76 Q110 16 172 76" fill="none" stroke="#312e81" stroke-width="6" stroke-linecap="round"/>
+                  <ellipse cx="48" cy="82" rx="14" ry="17" fill="#312e81" stroke="#1e1b4b" stroke-width="2"/>
+                  <ellipse cx="172" cy="82" rx="14" ry="17" fill="#312e81" stroke="#1e1b4b" stroke-width="2"/>
+                  <ellipse cx="48" cy="79" rx="8" ry="9" fill="#4338ca" opacity="0.7"/>
+                  <ellipse cx="172" cy="79" rx="8" ry="9" fill="#4338ca" opacity="0.7"/>
+                </g>
+                <g id="prev-acc-hero-cape" display="none">
+                  <path d="M68 108 Q50 138 62 158 Q85 168 110 166 Q135 168 158 158 Q170 138 152 108" fill="#7c3aed" opacity="0.82"/>
+                  <path d="M68 108 Q50 138 62 158 Q85 168 110 166 Q135 168 158 158 Q170 138 152 108" fill="none" stroke="#6d28d9" stroke-width="2"/>
+                  <line x1="110" y1="110" x2="110" y2="164" stroke="rgba(167,139,250,0.4)" stroke-width="1"/>
+                </g>
+                <g id="prev-acc-lucky-charm" display="none">
+                  <circle cx="171" cy="52" r="15" fill="#f59e0b" opacity="0.12"/>
+                  <polygon points="171,40 173.5,47.5 181,47.5 175,52.5 177.5,60 171,55.5 164.5,60 167,52.5 161,47.5 168.5,47.5" fill="#f59e0b"/>
+                  <circle cx="171" cy="52" r="3" fill="#fbbf24"/>
+                </g>
+                <g id="prev-acc-frost-badge" display="none">
+                  <polygon points="110,100 119,109 119,121 110,130 101,121 101,109" fill="rgba(147,210,255,0.65)" stroke="#7dd3fc" stroke-width="1.5"/>
+                  <polygon points="110,104 116,111 116,119 110,126 104,119 104,111" fill="rgba(186,230,255,0.4)"/>
+                  <line x1="98" y1="115" x2="122" y2="115" stroke="#bae6fd" stroke-width="1" opacity="0.6"/>
+                  <line x1="110" y1="97" x2="110" y2="133" stroke="#bae6fd" stroke-width="1" opacity="0.6"/>
+                  <circle cx="110" cy="115" r="3" fill="#e0f2fe" opacity="0.8"/>
+                </g>
+                <!-- Bow -->
+                <g id="prev-acc-bow" display="none">
+                  <path d="M90 35 Q77 21 83 17 Q92 15 95 28" fill="#f472b6" stroke="#ec4899" stroke-width="1.5"/>
+                  <path d="M90 35 Q78 27 80 21 Q87 20 90 30" fill="#fbbf24" opacity="0.25"/>
+                  <path d="M130 35 Q143 21 137 17 Q128 15 125 28" fill="#f472b6" stroke="#ec4899" stroke-width="1.5"/>
+                  <path d="M130 35 Q142 27 140 21 Q133 20 130 30" fill="#fbbf24" opacity="0.25"/>
+                  <circle cx="110" cy="30" r="8" fill="#ec4899"/>
+                  <circle cx="110" cy="30" r="5" fill="#f472b6"/>
+                  <circle cx="110" cy="30" r="2.5" fill="#fce7f3"/>
+                </g>
+                <!-- Monocle -->
+                <g id="prev-acc-monocle" display="none">
+                  <circle cx="127" cy="100" r="17" fill="none" stroke="#b45309" stroke-width="3"/>
+                  <circle cx="127" cy="100" r="14" fill="rgba(217,119,6,0.1)"/>
+                  <circle cx="127" cy="100" r="17" fill="none" stroke="#fbbf24" stroke-width="1" opacity="0.5"/>
+                  <path d="M140 113 Q150 122 147 130 Q143 134 137 132" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-dasharray="3,3"/>
+                </g>
+                <!-- Wizard Hat -->
+                <g id="prev-acc-wizard-hat" display="none">
+                  <polygon points="110,1 82,30 138,30" fill="#6d28d9" stroke="#4c1d95" stroke-width="1.5"/>
+                  <circle cx="103" cy="18" r="2.5" fill="#fbbf24" opacity="0.9"/>
+                  <circle cx="118" cy="11" r="2" fill="#c084fc" opacity="0.9"/>
+                  <path d="M108 18 L109.5 14 L111 18 L114 19 L111 20 L109.5 24 L108 20 L105 19Z" fill="#fbbf24" opacity="0.85"/>
+                  <ellipse cx="110" cy="30" rx="42" ry="9" fill="#7c3aed" stroke="#4c1d95" stroke-width="1.5"/>
+                  <ellipse cx="110" cy="28" rx="37" ry="5.5" fill="#8b5cf6" opacity="0.35"/>
+                </g>
+                <!-- Crown -->
+                <g id="prev-acc-crown" display="none">
+                  <path d="M81 35 L81 27 L93 34 L110 16 L127 34 L139 27 L139 35 Z" fill="#f59e0b" stroke="#d97706" stroke-width="1.5"/>
+                  <circle cx="110" cy="20" r="5" fill="#ef4444"/>
+                  <circle cx="93" cy="31" r="3.5" fill="#60a5fa"/>
+                  <circle cx="127" cy="31" r="3.5" fill="#60a5fa"/>
+                  <rect x="81" y="33" width="58" height="9" rx="3" fill="#d97706"/>
+                  <rect x="81" y="33" width="58" height="4" rx="2" fill="#f59e0b" opacity="0.5"/>
+                </g>
+                <!-- Halo -->
+                <g id="prev-acc-halo" display="none">
+                  <line x1="110" y1="14" x2="110" y2="30" stroke="rgba(251,191,36,0.22)" stroke-width="2.5"/>
+                  <ellipse cx="110" cy="10" rx="30" ry="7" fill="none" stroke="#f59e0b" stroke-width="6" opacity="0.9"/>
+                  <ellipse cx="110" cy="10" rx="30" ry="7" fill="none" stroke="#fef08a" stroke-width="2.5" opacity="0.75"/>
+                  <ellipse cx="110" cy="10" rx="30" ry="7" fill="none" stroke="#fbbf24" stroke-width="12" opacity="0.1"/>
+                </g>
+                <!-- Devil Horns -->
+                <g id="prev-acc-devil-horns" display="none">
+                  <path d="M80 40 Q67 18 75 7 Q84 16 87 33" fill="#ef4444" stroke="#dc2626" stroke-width="1.5"/>
+                  <path d="M80 40 Q70 22 74 11 Q80 18 82 31" fill="#fca5a5" opacity="0.4"/>
+                  <path d="M140 40 Q153 18 145 7 Q136 16 133 33" fill="#ef4444" stroke="#dc2626" stroke-width="1.5"/>
+                  <path d="M140 40 Q150 22 146 11 Q140 18 138 31" fill="#fca5a5" opacity="0.4"/>
+                </g>
+                <!-- Cat Ears -->
+                <g id="prev-acc-cat-ears" display="none">
+                  <polygon points="76,34 95,27 84,4" fill="#f9a8d4" stroke="#ec4899" stroke-width="2"/>
+                  <polygon points="80,32 91,28 86,11" fill="#fce7f3" opacity="0.9"/>
+                  <polygon points="144,34 125,27 136,4" fill="#f9a8d4" stroke="#ec4899" stroke-width="2"/>
+                  <polygon points="140,32 129,28 134,11" fill="#fce7f3" opacity="0.9"/>
+                </g>
+                <!-- Flower -->
+                <g id="prev-acc-flower" display="none">
+                  <g transform="translate(88,22)">
+                    <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a"/>
+                    <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a" transform="rotate(72)"/>
+                    <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a" transform="rotate(144)"/>
+                    <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a" transform="rotate(216)"/>
+                    <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a" transform="rotate(288)"/>
+                    <circle cx="0" cy="0" r="8" fill="#f97316"/>
+                    <circle cx="0" cy="0" r="5" fill="#fbbf24"/>
+                  </g>
+                </g>
+                <!-- Top Hat -->
+                <g id="prev-acc-top-hat" display="none">
+                  <rect x="84" y="2" width="52" height="25" rx="3" fill="#0f172a"/>
+                  <rect x="85" y="3" width="20" height="23" rx="2" fill="#1e293b" opacity="0.5"/>
+                  <rect x="84" y="19" width="52" height="8" fill="#7c3aed"/>
+                  <rect x="84" y="19" width="52" height="4" fill="#a78bfa" opacity="0.3"/>
+                  <rect x="68" y="25" width="84" height="8" rx="4" fill="#0f172a"/>
+                  <rect x="68" y="25" width="84" height="3" rx="2" fill="#1e293b" opacity="0.5"/>
+                </g>
+                <!-- Scarf -->
+                <g id="prev-acc-scarf" display="none">
+                  <path d="M54 132 Q110 125 166 132 Q168 143 166 148 Q110 141 54 148 Q52 143 54 132Z" fill="#ef4444"/>
+                  <path d="M54 133 Q110 126 166 133 L166 138 Q110 131 54 138Z" fill="#fca5a5" opacity="0.4"/>
+                  <rect x="90" y="142" width="16" height="22" rx="6" fill="#ef4444"/>
+                  <rect x="93" y="142" width="10" height="22" rx="4" fill="#fca5a5" opacity="0.35"/>
+                  <ellipse cx="98" cy="143" rx="11" ry="7" fill="#dc2626"/>
+                </g>
+                <!-- Angel Wings -->
+                <g id="prev-acc-angel-wings" display="none">
+                  <path d="M50 118 Q12 100 16 64 Q26 80 46 114" fill="rgba(248,250,255,0.88)" stroke="rgba(199,210,254,0.55)" stroke-width="1.2"/>
+                  <path d="M50 110 Q18 88 24 50 Q36 68 48 106" fill="rgba(240,245,255,0.74)"/>
+                  <path d="M50 100 Q24 74 34 36 Q46 56 50 96" fill="rgba(230,238,255,0.58)"/>
+                  <path d="M170 118 Q208 100 204 64 Q194 80 174 114" fill="rgba(248,250,255,0.88)" stroke="rgba(199,210,254,0.55)" stroke-width="1.2"/>
+                  <path d="M170 110 Q202 88 196 50 Q184 68 172 106" fill="rgba(240,245,255,0.74)"/>
+                  <path d="M170 100 Q196 74 186 36 Q174 56 170 96" fill="rgba(230,238,255,0.58)"/>
+                </g>
+                <!-- Dragon Wings -->
+                <g id="prev-acc-dragon-wings" display="none">
+                  <path d="M50 120 Q6 96 10 54 L26 72 L10 42 L46 68 L22 28 L58 60 L38 14 L68 58 L54 116" fill="#5b21b6" opacity="0.88" stroke="#7c3aed" stroke-width="1.5"/>
+                  <path d="M50 116 Q16 90 18 56 L30 70 L16 46 L46 68" fill="#4c1d95" opacity="0.35"/>
+                  <line x1="28" y1="70" x2="52" y2="114" stroke="#8b5cf6" stroke-width="1.2" opacity="0.5"/>
+                  <line x1="12" y1="44" x2="52" y2="108" stroke="#8b5cf6" stroke-width="1.2" opacity="0.4"/>
+                  <line x1="24" y1="30" x2="54" y2="100" stroke="#8b5cf6" stroke-width="1.2" opacity="0.3"/>
+                  <path d="M170 120 Q214 96 210 54 L194 72 L210 42 L174 68 L198 28 L162 60 L182 14 L152 58 L166 116" fill="#5b21b6" opacity="0.88" stroke="#7c3aed" stroke-width="1.5"/>
+                  <path d="M170 116 Q204 90 202 56 L190 70 L204 46 L174 68" fill="#4c1d95" opacity="0.35"/>
+                  <line x1="192" y1="70" x2="168" y2="114" stroke="#8b5cf6" stroke-width="1.2" opacity="0.5"/>
+                  <line x1="208" y1="44" x2="168" y2="108" stroke="#8b5cf6" stroke-width="1.2" opacity="0.4"/>
+                  <line x1="196" y1="30" x2="166" y2="100" stroke="#8b5cf6" stroke-width="1.2" opacity="0.3"/>
+                </g>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Bond + today count -->
+          <div class="blob-hero-footer">
+            <div class="blob-hero-tier-wrap">
+              <span class="blob-hero-tier-lbl">bond level</span>
+              <span class="tier-badge" id="tierBadge">—</span>
+            </div>
+            <div class="blob-hero-today-wrap">
+              <span class="blob-hero-count" id="todayCount">0</span>
+              <span class="blob-hero-lbl">chats today</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stat chips -->
+        <div class="blob-stat-row">
+          <div class="blob-stat-chip stat-chip-happiness">
+            <svg class="blob-stat-icon" width="16" height="16" viewBox="0 0 24 24" fill="#f472b6"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span class="blob-stat-val" id="valHappiness">0</span>
+            <span class="blob-stat-lbl">happy</span>
+            <div class="blob-stat-track"><div class="heart-bar-fill fill-happiness" id="barHappiness" style="width:0%"></div></div>
+          </div>
+          <div class="blob-stat-chip stat-chip-energy">
+            <svg class="blob-stat-icon" width="16" height="16" viewBox="0 0 24 24" fill="#fbbf24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            <span class="blob-stat-val" id="valEnergy">0</span>
+            <span class="blob-stat-lbl">energy</span>
+            <div class="blob-stat-track"><div class="heart-bar-fill fill-energy" id="barEnergy" style="width:0%"></div></div>
+          </div>
+          <div class="blob-stat-chip stat-chip-familiarity">
+            <svg class="blob-stat-icon" width="16" height="16" viewBox="0 0 24 24" fill="#a78bfa"><path d="M12 2l2.4 7.6H22l-6.4 4.7 2.4 7.7L12 17.3l-6 4.7 2.4-7.7L2 9.6h7.6z"/></svg>
+            <span class="blob-stat-val" id="valFamiliarity">0</span>
+            <span class="blob-stat-lbl">bond</span>
+            <div class="blob-stat-track"><div class="heart-bar-fill fill-familiarity" id="barFamiliarity" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <!-- Wearing / Customize -->
+        <div class="card blob-wearing-card">
+          <div class="blob-wearing-head">
+            <span class="blob-wearing-title">wearing</span>
+            <button class="blob-customize-btn" data-action="shop">customize →</button>
+          </div>
+          <div class="blob-wearing-list" id="blobWearingList">
+            <span class="blob-wearing-empty">nothing equipped</span>
+          </div>
+        </div>
+
+        <!-- Navigation tiles -->
+        <div class="heart-nav-grid">
+
+          <button class="heart-nav-tile tile-shop" data-action="shop">
+            <svg class="heart-nav-bg" viewBox="0 0 120 100" fill="none">
+              <circle cx="90" cy="20" r="40" fill="rgba(124,58,237,0.12)"/>
+              <circle cx="90" cy="20" r="65" fill="rgba(124,58,237,0.06)"/>
+            </svg>
+            <div class="heart-nav-icon-wrap" style="background:rgba(124,58,237,0.2);border-color:rgba(124,58,237,0.35)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <path d="M16 10a4 4 0 0 1-8 0"/>
+              </svg>
+            </div>
+            <span class="heart-nav-label">shop</span>
+            <span class="heart-nav-sub">gear up</span>
+          </button>
+
+          <button class="heart-nav-tile tile-achieve" data-action="achievements">
+            <svg class="heart-nav-bg" viewBox="0 0 120 100" fill="none">
+              <circle cx="90" cy="20" r="40" fill="rgba(245,158,11,0.12)"/>
+              <circle cx="90" cy="20" r="65" fill="rgba(245,158,11,0.06)"/>
+            </svg>
+            <div class="heart-nav-icon-wrap" style="background:rgba(245,158,11,0.18);border-color:rgba(245,158,11,0.3)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </div>
+            <span class="heart-nav-label">achievements</span>
+            <span class="heart-nav-sub">milestones</span>
+          </button>
+
+          <button class="heart-nav-tile tile-memories" data-action="memories">
+            <svg class="heart-nav-bg" viewBox="0 0 120 100" fill="none">
+              <circle cx="90" cy="20" r="40" fill="rgba(59,130,246,0.12)"/>
+              <circle cx="90" cy="20" r="65" fill="rgba(59,130,246,0.06)"/>
+            </svg>
+            <div class="heart-nav-icon-wrap" style="background:rgba(59,130,246,0.18);border-color:rgba(59,130,246,0.3)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 12h8m-8 6h16M4 6h16"/>
+              </svg>
+            </div>
+            <span class="heart-nav-label">memories</span>
+            <span class="heart-nav-sub">your story</span>
+          </button>
+
+          <button class="heart-nav-tile tile-settings" data-action="settings">
+            <svg class="heart-nav-bg" viewBox="0 0 120 100" fill="none">
+              <circle cx="90" cy="20" r="40" fill="rgba(100,116,139,0.12)"/>
+              <circle cx="90" cy="20" r="65" fill="rgba(100,116,139,0.06)"/>
+            </svg>
+            <div class="heart-nav-icon-wrap" style="background:rgba(100,116,139,0.18);border-color:rgba(100,116,139,0.3)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </div>
+            <span class="heart-nav-label">settings</span>
+            <span class="heart-nav-sub">configure</span>
+          </button>
+
+        </div>
+
+      </div>
+
+      <!-- ══════════════ SCREEN: SHOP ══════════════ -->
+      <div class="screen" id="screen-shop">
+        <div class="page-header">
+          <button class="icon-btn back-btn" data-back="heart" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">shop</span>
+          <div class="shop-header-coins">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#f59e0b" stroke-width="1.5"/><circle cx="7" cy="7" r="2.2" fill="#f59e0b"/></svg>
+            <span id="shopCoins">0</span>
+          </div>
+        </div>
+        <!-- Blob preview stage -->
+        <div class="shop-blob-stage" id="shopBlobStage">
+          <div class="shop-blob-glow" id="shopBlobGlow"></div>
+        </div>
+
+        <div class="shop-tabs" id="shopTabs">
+          <button class="shop-tab active" data-tier="all">All</button>
+          <button class="shop-tab" data-tier="common">Common</button>
+          <button class="shop-tab" data-tier="rare">Rare</button>
+          <button class="shop-tab" data-tier="epic">Epic</button>
+          <button class="shop-tab" data-tier="legendary">✦ Legend</button>
+        </div>
+        <div class="shop-grid" id="shopGrid">
+          <div class="empty-state">loading…</div>
+        </div>
+        <!-- Try-on banner -->
+        <div class="try-on-banner hidden" id="tryOnBanner">
+          <span class="try-on-text">
+            <span class="try-on-dot"></span>
+            on blob: <strong id="tryOnName">—</strong>
+          </span>
+          <button class="try-on-stop" id="tryOnStop">✕ stop</button>
+        </div>
+      </div>
+
+      <!-- ══════════════ SCREEN: FOCUS ══════════════ -->
+      <div class="screen" id="screen-focus">
+        <div class="page-header">
+          <button class="icon-btn back-btn" data-back="add" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">focus</span>
+          <button class="icon-btn add-item-btn" data-open="focus" aria-label="Log session manually">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Active timer view -->
+        <div class="focus-active hidden" id="focusActive">
+          <div class="focus-active-inner">
+            <div class="focus-meta">
+              <span class="focus-phase-pill" id="focusPhasePill">WORK</span>
+              <span class="focus-session-count" id="focusSessionCount">session 1 / 4</span>
+            </div>
+
+            <div class="focus-timer-wrap">
+              <div class="focus-ring-glow" id="focusRingGlow"></div>
+              <svg class="focus-ring-svg" viewBox="0 0 200 200">
+                <defs>
+                  <linearGradient id="ringGradWork" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#c084fc"/>
+                    <stop offset="100%" stop-color="#818cf8"/>
+                  </linearGradient>
+                  <linearGradient id="ringGradBreak" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#34d399"/>
+                    <stop offset="100%" stop-color="#6ee7b7"/>
+                  </linearGradient>
+                  <linearGradient id="ringGradLong" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#60a5fa"/>
+                    <stop offset="100%" stop-color="#93c5fd"/>
+                  </linearGradient>
+                  <filter id="ringGlowFilter" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="5" result="blur"/>
+                    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                </defs>
+                <circle class="focus-ring-bg" cx="100" cy="100" r="88"/>
+                <circle class="focus-ring-fill" id="focusRingFill" cx="100" cy="100" r="88" stroke="url(#ringGradWork)"/>
+              </svg>
+              <div class="focus-timer-inner">
+                <div class="focus-timer-text" id="focusTimerText">25:00</div>
+                <div class="focus-timer-sub" id="focusTimerSub">remaining</div>
+              </div>
+            </div>
+
+            <div class="focus-task-name" id="focusTaskName">free focus</div>
+
+            <div class="focus-pomo-dots" id="focusPomoDots">
+              <div class="focus-pomo-dot"></div>
+              <div class="focus-pomo-dot"></div>
+              <div class="focus-pomo-dot"></div>
+              <div class="focus-pomo-dot"></div>
+            </div>
+
+            <div class="focus-controls">
+              <button class="focus-ctrl-btn" id="focusPauseBtn">pause</button>
+              <button class="focus-ctrl-btn" id="focusSkipBtn">skip →</button>
+              <button class="focus-ctrl-btn focus-ctrl-stop" id="focusStopBtn">stop</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Idle / setup view -->
+        <div class="focus-idle" id="focusIdle">
+          <div class="card focus-setup-card">
+            <div class="focus-setup-row">
+              <span class="focus-setup-label">focus on</span>
+              <select class="focus-task-select" id="focusTaskSelect">
+                <option value="">no specific task</option>
+              </select>
+            </div>
+
+            <div class="focus-dur-divider"></div>
+
+            <div class="focus-durations">
+              <div class="focus-dur-row">
+                <span class="focus-dur-label">work</span>
+                <div class="focus-dur-ctrl">
+                  <button class="focus-dur-btn" data-dur="work" data-delta="-5">−</button>
+                  <span class="focus-dur-val" id="durWork">25</span>
+                  <span class="focus-dur-unit">min</span>
+                  <button class="focus-dur-btn" data-dur="work" data-delta="5">+</button>
+                </div>
+              </div>
+              <div class="focus-dur-row">
+                <span class="focus-dur-label">short break</span>
+                <div class="focus-dur-ctrl">
+                  <button class="focus-dur-btn" data-dur="short" data-delta="-1">−</button>
+                  <span class="focus-dur-val" id="durShort">5</span>
+                  <span class="focus-dur-unit">min</span>
+                  <button class="focus-dur-btn" data-dur="short" data-delta="1">+</button>
+                </div>
+              </div>
+              <div class="focus-dur-row">
+                <span class="focus-dur-label">long break</span>
+                <div class="focus-dur-ctrl">
+                  <button class="focus-dur-btn" data-dur="long" data-delta="-5">−</button>
+                  <span class="focus-dur-val" id="durLong">15</span>
+                  <span class="focus-dur-unit">min</span>
+                  <button class="focus-dur-btn" data-dur="long" data-delta="5">+</button>
+                </div>
+              </div>
+            </div>
+
+            <button class="focus-start-btn" id="focusStartBtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              start pomodoro
+            </button>
+          </div>
+
+          <div class="focus-sessions-header">sessions</div>
+          <ul class="item-list" id="focusList"><li class="empty-state">no sessions yet — start focusing!</li></ul>
+        </div>
+      </div>
+
+      <!-- ══════════════ SCREEN: GOALS ══════════════ -->
+      <div class="screen" id="screen-goals">
+        <div class="page-header">
+          <button class="icon-btn back-btn" data-back="add" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">goals</span>
+          <button class="icon-btn" id="addGoalBtn" aria-label="Add goal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Add goal inline form -->
+        <div id="addGoalForm" class="goal-add-form hidden">
+          <input id="goalTitleIn" class="goal-add-input" placeholder="what do you want to achieve?" maxlength="80" autocomplete="off"/>
+          <div class="goal-add-row">
+            <select id="goalCatIn" class="goal-add-select">
+              <option value="fitness">fitness</option>
+              <option value="academic">academic</option>
+              <option value="financial">financial</option>
+              <option value="personal" selected>personal</option>
+              <option value="career">career</option>
+              <option value="health">health</option>
+              <option value="social">social</option>
+              <option value="creative">creative</option>
+            </select>
+            <input id="goalDeadlineIn" class="goal-add-input goal-add-date" type="date" title="deadline (optional)"/>
+          </div>
+          <div class="goal-add-actions">
+            <button id="saveGoalBtn" class="goal-save-btn">add goal</button>
+            <button id="cancelGoalBtn" class="goal-cancel-btn">cancel</button>
+          </div>
+        </div>
+        <ul class="item-list" id="goalsList" style="gap:10px"><li class="empty-state">no goals yet — set one!</li></ul>
+      </div>
+
+      <!-- ══════════════ SCREEN: NAVIGATION ══════════════ -->
+      <div class="screen" id="screen-navigation">
+        <div class="page-header" style="margin-bottom:0">
+          <button class="icon-btn back-btn" data-back="add" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">navigation</span>
+          <span style="width:32px"></span>
+        </div>
+        <div class="nav-tabs" id="navTabs">
+          <button class="nav-tab active" data-tab="overview">overview</button>
+          <button class="nav-tab" data-tab="future">future</button>
+          <button class="nav-tab" data-tab="identity">identity</button>
+        </div>
+        <div class="nav-tab-content" id="navTabContent">
+          <div class="empty-state" style="padding:40px 0">loading…</div>
+        </div>
+      </div>
+
+      <!-- ══════════════ SCREEN: HABITS ══════════════ -->
+      <div class="screen" id="screen-habits">
+        <div class="page-header">
+          <button class="icon-btn back-btn" data-back="add" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">habits</span>
+          <button class="icon-btn add-item-btn" data-open="habit" aria-label="Add habit">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+        <ul class="item-list" id="habitsList"><li class="empty-state">no habits yet</li></ul>
+      </div>
+
+      <!-- ══════════════ SCREEN: JOURNAL ══════════════ -->
+      <div class="screen" id="screen-journal">
+        <div class="page-header">
+          <button class="icon-btn back-btn" data-back="add" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">journal</span>
+          <button class="icon-btn add-item-btn" data-open="journal" aria-label="Add journal entry">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+        <ul class="item-list" id="journalList"><li class="empty-state">no entries yet</li></ul>
+      </div>
+
+      <!-- ══════════════ SCREEN: MEMORIES ══════════════ -->
+      <div class="screen" id="screen-memories">
+        <div class="page-header">
+          <button class="icon-btn back-btn" data-back="heart" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">memories</span>
+        </div>
+        <div id="memoriesContent"><p class="empty-state">no memories yet</p></div>
+      </div>
+
+      <!-- ══════════════ SCREEN: ACHIEVEMENTS ══════════════ -->
+      <div class="screen" id="screen-achievements">
+        <div class="page-header">
+          <button class="icon-btn back-btn" data-back="heart" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">achievements</span>
+        </div>
+        <div id="achievementsContent"></div>
+      </div>
+
+      <!-- ══════════════ SCREEN: SETTINGS ══════════════ -->
+      <div class="screen" id="screen-settings">
+        <div class="page-header">
+          <button class="icon-btn back-btn" data-back="heart" aria-label="Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="page-title">settings</span>
+        </div>
+        <div class="settings-list">
+          <button class="settings-row" id="notifsToggleRow">
+            <div class="settings-row-left">
+              <span class="settings-row-title">activity notifications</span>
+              <span class="settings-row-desc">log when tasks, habits, and goals are completed</span>
+            </div>
+            <div class="toggle" id="notifsToggle"><div class="toggle-thumb"></div></div>
+          </button>
+          <button class="settings-row" id="resetBlobBtn">
+            <div class="settings-row-left">
+              <span class="settings-row-title">reset blob bond</span>
+              <span class="settings-row-desc">start your relationship over</span>
+            </div>
+            <span class="settings-row-danger">reset</span>
+          </button>
+          <button class="settings-row" id="clearCompletedBtn">
+            <div class="settings-row-left">
+              <span class="settings-row-title">clear completed tasks</span>
+              <span class="settings-row-desc">remove all done tasks</span>
+            </div>
+            <span class="settings-row-danger">clear</span>
+          </button>
+          <button class="settings-row" id="resetPetBtn">
+            <div class="settings-row-left">
+              <span class="settings-row-title">reset pet stats</span>
+              <span class="settings-row-desc">reset coins, streak, level</span>
+            </div>
+            <span class="settings-row-danger">reset</span>
+          </button>
+          <div class="settings-row static">
+            <div class="settings-row-left">
+              <span class="settings-row-title">your blob</span>
+              <span class="settings-row-desc">version 1.0.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Usage Card -->
+        <div class="usage-card" id="usageCard">
+          <div class="usage-card-header">
+            <span class="usage-card-title">AI usage</span>
+            <span class="usage-model">llama-3.1-8b-instant</span>
+          </div>
+          <div class="usage-grid" id="usageGrid">
+            <div class="usage-stat"><span class="usage-val" id="usageTodayTokens">—</span><span class="usage-lbl">tokens today</span></div>
+            <div class="usage-stat"><span class="usage-val" id="usageTodayCalls">—</span><span class="usage-lbl">calls today</span></div>
+            <div class="usage-stat"><span class="usage-val" id="usageTotalTokens">—</span><span class="usage-lbl">tokens all-time</span></div>
+            <div class="usage-stat"><span class="usage-val" id="usageCostEst">—</span><span class="usage-lbl">est. cost (USD)</span></div>
+          </div>
+          <div class="usage-breakdown" id="usageBreakdown"></div>
+        </div>
+      </div>
+
+      <!-- ══════════════ NOTIFICATION PANEL ══════════════ -->
+      <div class="notif-panel" id="notifPanel">
+        <div class="notif-header">
+          <span class="notif-title">notifications</span>
+          <div class="notif-header-right">
+            <button class="notif-clear-btn" id="clearNotifsBtn">clear all</button>
+            <button class="icon-btn" id="closeNotifBtn" aria-label="Close notifications">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="notif-list" id="notifList">
+          <div class="notif-empty">no notifications yet</div>
+        </div>
+        <div class="notif-pill"></div>
+      </div>
+
+      <!-- ══════════════ CHAT PANEL ══════════════ -->
+      <div class="chat-panel" id="chatPanel">
+        <div class="chat-pill"></div>
+        <div class="chat-header">
+          <div class="chat-blob-info">
+            <div class="chat-blob-dot"></div>
+            <span class="chat-blob-name">your blob</span>
+            <span class="chat-tier" id="chatTier">—</span>
+          </div>
+          <button class="icon-btn" id="closeChatBtn" aria-label="Close chat">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-reply-bar" id="chatReplyBar">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.5"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+          <div class="chat-reply-bar-content">
+            <span class="chat-reply-bar-label">replying to</span>
+            <span class="chat-reply-bar-text" id="chatReplyText"></span>
+          </div>
+          <button class="chat-reply-bar-close" id="chatReplyClear" aria-label="Clear reply">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="chat-input-row">
+          <input type="text" class="chat-input" id="chatInput" placeholder="say something..." maxlength="200" autocomplete="off" />
+          <button class="chat-send-btn" id="chatSendBtn" aria-label="Send">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bottom Nav -->
+      <nav class="bottom-nav">
+        <button class="nav-item active" data-screen="home" id="nav-home" aria-label="Home">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+        </button>
+        <button class="nav-item nav-plus" data-screen="add" id="nav-add" aria-label="Add">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <button class="nav-item" data-screen="heart" id="nav-heart" aria-label="Heart">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </button>
+      </nav>
+
+      <!-- Free-moving Blob -->
+      <button class="blob mood-happy" id="blob" aria-label="Your blob">
+        <svg class="blob-svg" viewBox="0 0 220 170" aria-hidden="true">
+          <path class="blob-body" d="M24 113C23 100 31 90 45 84C47 52 71 27 110 27C149 27 173 52 175 84C190 89 197 100 196 113C195 125 184 132 171 130C159 141 142 146 110 146C78 146 61 141 49 130C36 132 25 125 24 113Z"/>
+          <ellipse class="eye left" cx="95" cy="101" rx="7" ry="8"/>
+          <ellipse class="eye right" cx="125" cy="101" rx="7" ry="8"/>
+          <path class="eye-closed left" d="M88 103C93 108 98 108 102 103"/>
+          <path class="eye-closed right" d="M118 103C123 108 128 108 132 103"/>
+          <path class="brow left" d="M88 89C91 86 95 86 98 89"/>
+          <path class="brow right" d="M122 89C125 86 129 86 132 89"/>
+          <path class="mouth smile" d="M102 116C106 121 114 121 118 116"/>
+          <path class="mouth flat" d="M103 117H117"/>
+          <path class="mouth sad" d="M102 120C106 115 114 115 118 120"/>
+          <path class="mouth o" d="M109 113A4.5 4.5 0 1 0 109 122A4.5 4.5 0 1 0 109 113"/>
+          <ellipse class="blush left" cx="81" cy="112" rx="9" ry="4"/>
+          <ellipse class="blush right" cx="139" cy="112" rx="9" ry="4"/>
+          <!-- punched: X eyes -->
+          <path class="eye-x left"  d="M88 94L102 108 M102 94L88 108"/>
+          <path class="eye-x right" d="M118 94L132 108 M132 94L118 108"/>
+          <!-- punched: floating stars -->
+          <path class="star s1" d="M55 68L57 63L59 68L64 70L59 72L57 77L55 72L50 70Z"/>
+          <path class="star s2" d="M155 58L157 54L159 58L163 60L159 62L157 66L155 62L151 60Z"/>
+          <path class="star s3" d="M108 18L110 14L112 18L116 20L112 22L110 26L108 22L104 20Z"/>
+          <!-- dizzy: swirl eyes -->
+          <path class="eye-swirl left"  d="M96 101C96 97 92 94 89 96C86 99 87 104 90 106C94 109 100 107 101 103C102 98 99 93 94 92"/>
+          <path class="eye-swirl right" d="M124 101C124 97 128 94 131 96C134 99 133 104 130 106C126 109 120 107 119 103C118 98 121 93 126 92"/>
+
+          <!-- ── Accessories (toggled by JS) ── -->
+          <!-- Sunglasses -->
+          <g id="acc-sunglasses" display="none">
+            <ellipse cx="88" cy="84" rx="18" ry="12" fill="rgba(10,5,30,0.72)" stroke="#4c1d95" stroke-width="2"/>
+            <ellipse cx="132" cy="84" rx="18" ry="12" fill="rgba(10,5,30,0.72)" stroke="#4c1d95" stroke-width="2"/>
+            <ellipse cx="88" cy="82" rx="10" ry="6" fill="#7c3aed" opacity="0.2"/>
+            <ellipse cx="132" cy="82" rx="10" ry="6" fill="#7c3aed" opacity="0.2"/>
+            <line x1="106" y1="84" x2="114" y2="84" stroke="#4c1d95" stroke-width="2.5"/>
+            <line x1="70" y1="85" x2="58" y2="88" stroke="#4c1d95" stroke-width="2" stroke-linecap="round"/>
+            <line x1="150" y1="85" x2="162" y2="88" stroke="#4c1d95" stroke-width="2" stroke-linecap="round"/>
+          </g>
+          <!-- Party Hat -->
+          <g id="acc-party-hat" display="none">
+            <polygon points="110,2 86,30 134,30" fill="#f97316" stroke="#c2410c" stroke-width="1.5"/>
+            <polygon points="110,2 97,16 123,16" fill="#fb923c" opacity="0.6"/>
+            <line x1="98" y1="19" x2="122" y2="19" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>
+            <line x1="103" y1="10" x2="117" y2="10" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+            <circle cx="110" cy="2" r="7" fill="#fbbf24"/>
+            <circle cx="110" cy="2" r="4" fill="#f59e0b"/>
+          </g>
+          <!-- Headphones -->
+          <g id="acc-headphones" display="none">
+            <path d="M48 76 Q110 16 172 76" fill="none" stroke="#1e1b4b" stroke-width="9" stroke-linecap="round"/>
+            <path d="M48 76 Q110 16 172 76" fill="none" stroke="#312e81" stroke-width="6" stroke-linecap="round"/>
+            <ellipse cx="48" cy="82" rx="14" ry="17" fill="#312e81" stroke="#1e1b4b" stroke-width="2"/>
+            <ellipse cx="172" cy="82" rx="14" ry="17" fill="#312e81" stroke="#1e1b4b" stroke-width="2"/>
+            <ellipse cx="48" cy="79" rx="8" ry="9" fill="#4338ca" opacity="0.7"/>
+            <ellipse cx="172" cy="79" rx="8" ry="9" fill="#4338ca" opacity="0.7"/>
+          </g>
+          <!-- Hero Cape (drawn at back — JS moves this before body) -->
+          <g id="acc-hero-cape" display="none">
+            <path d="M68 108 Q50 138 62 158 Q85 168 110 166 Q135 168 158 158 Q170 138 152 108" fill="#7c3aed" opacity="0.82"/>
+            <path d="M68 108 Q50 138 62 158 Q85 168 110 166 Q135 168 158 158 Q170 138 152 108" fill="none" stroke="#6d28d9" stroke-width="2"/>
+            <line x1="110" y1="110" x2="110" y2="164" stroke="rgba(167,139,250,0.4)" stroke-width="1"/>
+          </g>
+          <!-- Lucky Charm (orbiting star) -->
+          <g id="acc-lucky-charm" display="none">
+            <circle cx="171" cy="52" r="15" fill="#f59e0b" opacity="0.12"/>
+            <polygon points="171,40 173.5,47.5 181,47.5 175,52.5 177.5,60 171,55.5 164.5,60 167,52.5 161,47.5 168.5,47.5" fill="#f59e0b"/>
+            <circle cx="171" cy="52" r="3" fill="#fbbf24"/>
+          </g>
+          <!-- Frost Badge (crystal on chest) -->
+          <g id="acc-frost-badge" display="none">
+            <polygon points="110,100 119,109 119,121 110,130 101,121 101,109" fill="rgba(147,210,255,0.65)" stroke="#7dd3fc" stroke-width="1.5"/>
+            <polygon points="110,104 116,111 116,119 110,126 104,119 104,111" fill="rgba(186,230,255,0.4)"/>
+            <line x1="98" y1="115" x2="122" y2="115" stroke="#bae6fd" stroke-width="1" opacity="0.6"/>
+            <line x1="110" y1="97" x2="110" y2="133" stroke="#bae6fd" stroke-width="1" opacity="0.6"/>
+            <circle cx="110" cy="115" r="3" fill="#e0f2fe" opacity="0.8"/>
+          </g>
+          <!-- Bow -->
+          <g id="acc-bow" display="none">
+            <path d="M90 35 Q77 21 83 17 Q92 15 95 28" fill="#f472b6" stroke="#ec4899" stroke-width="1.5"/>
+            <path d="M90 35 Q78 27 80 21 Q87 20 90 30" fill="#fbbf24" opacity="0.25"/>
+            <path d="M130 35 Q143 21 137 17 Q128 15 125 28" fill="#f472b6" stroke="#ec4899" stroke-width="1.5"/>
+            <path d="M130 35 Q142 27 140 21 Q133 20 130 30" fill="#fbbf24" opacity="0.25"/>
+            <circle cx="110" cy="30" r="8" fill="#ec4899"/>
+            <circle cx="110" cy="30" r="5" fill="#f472b6"/>
+            <circle cx="110" cy="30" r="2.5" fill="#fce7f3"/>
+          </g>
+          <!-- Monocle -->
+          <g id="acc-monocle" display="none">
+            <circle cx="127" cy="100" r="17" fill="none" stroke="#b45309" stroke-width="3"/>
+            <circle cx="127" cy="100" r="14" fill="rgba(217,119,6,0.1)"/>
+            <circle cx="127" cy="100" r="17" fill="none" stroke="#fbbf24" stroke-width="1" opacity="0.5"/>
+            <path d="M140 113 Q150 122 147 130 Q143 134 137 132" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-dasharray="3,3"/>
+          </g>
+          <!-- Wizard Hat -->
+          <g id="acc-wizard-hat" display="none">
+            <polygon points="110,1 82,30 138,30" fill="#6d28d9" stroke="#4c1d95" stroke-width="1.5"/>
+            <circle cx="103" cy="18" r="2.5" fill="#fbbf24" opacity="0.9"/>
+            <circle cx="118" cy="11" r="2" fill="#c084fc" opacity="0.9"/>
+            <path d="M108 18 L109.5 14 L111 18 L114 19 L111 20 L109.5 24 L108 20 L105 19Z" fill="#fbbf24" opacity="0.85"/>
+            <ellipse cx="110" cy="30" rx="42" ry="9" fill="#7c3aed" stroke="#4c1d95" stroke-width="1.5"/>
+            <ellipse cx="110" cy="28" rx="37" ry="5.5" fill="#8b5cf6" opacity="0.35"/>
+          </g>
+          <!-- Crown -->
+          <g id="acc-crown" display="none">
+            <path d="M81 35 L81 27 L93 34 L110 16 L127 34 L139 27 L139 35 Z" fill="#f59e0b" stroke="#d97706" stroke-width="1.5"/>
+            <circle cx="110" cy="20" r="5" fill="#ef4444"/>
+            <circle cx="93" cy="31" r="3.5" fill="#60a5fa"/>
+            <circle cx="127" cy="31" r="3.5" fill="#60a5fa"/>
+            <rect x="81" y="33" width="58" height="9" rx="3" fill="#d97706"/>
+            <rect x="81" y="33" width="58" height="4" rx="2" fill="#f59e0b" opacity="0.5"/>
+          </g>
+          <!-- Halo -->
+          <g id="acc-halo" display="none">
+            <line x1="110" y1="14" x2="110" y2="30" stroke="rgba(251,191,36,0.22)" stroke-width="2.5"/>
+            <ellipse cx="110" cy="10" rx="30" ry="7" fill="none" stroke="#f59e0b" stroke-width="6" opacity="0.9"/>
+            <ellipse cx="110" cy="10" rx="30" ry="7" fill="none" stroke="#fef08a" stroke-width="2.5" opacity="0.75"/>
+            <ellipse cx="110" cy="10" rx="30" ry="7" fill="none" stroke="#fbbf24" stroke-width="12" opacity="0.1"/>
+          </g>
+          <!-- Devil Horns -->
+          <g id="acc-devil-horns" display="none">
+            <path d="M80 40 Q67 18 75 7 Q84 16 87 33" fill="#ef4444" stroke="#dc2626" stroke-width="1.5"/>
+            <path d="M80 40 Q70 22 74 11 Q80 18 82 31" fill="#fca5a5" opacity="0.4"/>
+            <path d="M140 40 Q153 18 145 7 Q136 16 133 33" fill="#ef4444" stroke="#dc2626" stroke-width="1.5"/>
+            <path d="M140 40 Q150 22 146 11 Q140 18 138 31" fill="#fca5a5" opacity="0.4"/>
+          </g>
+          <!-- Cat Ears -->
+          <g id="acc-cat-ears" display="none">
+            <polygon points="76,34 95,27 84,4" fill="#f9a8d4" stroke="#ec4899" stroke-width="2"/>
+            <polygon points="80,32 91,28 86,11" fill="#fce7f3" opacity="0.9"/>
+            <polygon points="144,34 125,27 136,4" fill="#f9a8d4" stroke="#ec4899" stroke-width="2"/>
+            <polygon points="140,32 129,28 134,11" fill="#fce7f3" opacity="0.9"/>
+          </g>
+          <!-- Flower -->
+          <g id="acc-flower" display="none">
+            <g transform="translate(88,22)">
+              <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a"/>
+              <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a" transform="rotate(72)"/>
+              <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a" transform="rotate(144)"/>
+              <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a" transform="rotate(216)"/>
+              <ellipse cx="0" cy="-11" rx="5.5" ry="9" fill="#fde68a" transform="rotate(288)"/>
+              <circle cx="0" cy="0" r="8" fill="#f97316"/>
+              <circle cx="0" cy="0" r="5" fill="#fbbf24"/>
+            </g>
+          </g>
+          <!-- Top Hat -->
+          <g id="acc-top-hat" display="none">
+            <rect x="84" y="2" width="52" height="25" rx="3" fill="#0f172a"/>
+            <rect x="85" y="3" width="20" height="23" rx="2" fill="#1e293b" opacity="0.5"/>
+            <rect x="84" y="19" width="52" height="8" fill="#7c3aed"/>
+            <rect x="84" y="19" width="52" height="4" fill="#a78bfa" opacity="0.3"/>
+            <rect x="68" y="25" width="84" height="8" rx="4" fill="#0f172a"/>
+            <rect x="68" y="25" width="84" height="3" rx="2" fill="#1e293b" opacity="0.5"/>
+          </g>
+          <!-- Scarf -->
+          <g id="acc-scarf" display="none">
+            <path d="M54 132 Q110 125 166 132 Q168 143 166 148 Q110 141 54 148 Q52 143 54 132Z" fill="#ef4444"/>
+            <path d="M54 133 Q110 126 166 133 L166 138 Q110 131 54 138Z" fill="#fca5a5" opacity="0.4"/>
+            <rect x="90" y="142" width="16" height="22" rx="6" fill="#ef4444"/>
+            <rect x="93" y="142" width="10" height="22" rx="4" fill="#fca5a5" opacity="0.35"/>
+            <ellipse cx="98" cy="143" rx="11" ry="7" fill="#dc2626"/>
+          </g>
+          <!-- Angel Wings -->
+          <g id="acc-angel-wings" display="none">
+            <path d="M50 118 Q12 100 16 64 Q26 80 46 114" fill="rgba(248,250,255,0.88)" stroke="rgba(199,210,254,0.55)" stroke-width="1.2"/>
+            <path d="M50 110 Q18 88 24 50 Q36 68 48 106" fill="rgba(240,245,255,0.74)"/>
+            <path d="M50 100 Q24 74 34 36 Q46 56 50 96" fill="rgba(230,238,255,0.58)"/>
+            <path d="M170 118 Q208 100 204 64 Q194 80 174 114" fill="rgba(248,250,255,0.88)" stroke="rgba(199,210,254,0.55)" stroke-width="1.2"/>
+            <path d="M170 110 Q202 88 196 50 Q184 68 172 106" fill="rgba(240,245,255,0.74)"/>
+            <path d="M170 100 Q196 74 186 36 Q174 56 170 96" fill="rgba(230,238,255,0.58)"/>
+          </g>
+          <!-- Dragon Wings -->
+          <g id="acc-dragon-wings" display="none">
+            <path d="M50 120 Q6 96 10 54 L26 72 L10 42 L46 68 L22 28 L58 60 L38 14 L68 58 L54 116" fill="#5b21b6" opacity="0.88" stroke="#7c3aed" stroke-width="1.5"/>
+            <path d="M50 116 Q16 90 18 56 L30 70 L16 46 L46 68" fill="#4c1d95" opacity="0.35"/>
+            <line x1="28" y1="70" x2="52" y2="114" stroke="#8b5cf6" stroke-width="1.2" opacity="0.5"/>
+            <line x1="12" y1="44" x2="52" y2="108" stroke="#8b5cf6" stroke-width="1.2" opacity="0.4"/>
+            <line x1="24" y1="30" x2="54" y2="100" stroke="#8b5cf6" stroke-width="1.2" opacity="0.3"/>
+            <path d="M170 120 Q214 96 210 54 L194 72 L210 42 L174 68 L198 28 L162 60 L182 14 L152 58 L166 116" fill="#5b21b6" opacity="0.88" stroke="#7c3aed" stroke-width="1.5"/>
+            <path d="M170 116 Q204 90 202 56 L190 70 L204 46 L174 68" fill="#4c1d95" opacity="0.35"/>
+            <line x1="192" y1="70" x2="168" y2="114" stroke="#8b5cf6" stroke-width="1.2" opacity="0.5"/>
+            <line x1="208" y1="44" x2="168" y2="108" stroke="#8b5cf6" stroke-width="1.2" opacity="0.4"/>
+            <line x1="196" y1="30" x2="166" y2="100" stroke="#8b5cf6" stroke-width="1.2" opacity="0.3"/>
+          </g>
+        </svg>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- Add Task Modal -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">new task</h3>
+        <button class="modal-close" id="closeModal">✕</button>
+      </div>
+      <form id="taskForm">
+        <input type="text" id="taskInput" placeholder="what do you need to do?" maxlength="80" autocomplete="off" />
+        <div class="category-chips" id="categoryChips"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="cancelModal">cancel</button>
+          <button type="submit" class="btn-primary">add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Content Modal (notes, goals, habits, reminders, journal) -->
+  <div class="modal-overlay hidden" id="contentModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="contentModalTitle">add note</h3>
+        <button class="modal-close" id="closeContentModal">✕</button>
+      </div>
+      <form id="contentForm">
+        <input type="text" id="contentInput" placeholder="" maxlength="120" autocomplete="off" />
+        <textarea id="contentTextarea" placeholder="" maxlength="800" rows="4"></textarea>
+        <select id="contentSelect"></select>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="cancelContentModal">cancel</button>
+          <button type="submit" class="btn-primary">save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="{{ url_for('static', filename='pet.js') }}"></script>
+</body>
+</html>
