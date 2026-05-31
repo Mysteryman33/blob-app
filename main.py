@@ -2452,6 +2452,7 @@ def reset_pet():
         pet = pet_with_level(dict(c.execute('SELECT * FROM pet WHERE id=1').fetchone()))
     return jsonify(pet)
 
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True, port=5002)
