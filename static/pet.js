@@ -609,8 +609,8 @@ function renderTasks() {
   taskListEl.innerHTML = tasks.map(t => {
     const safe = esc(t.title);
     return `
-      <li class="task-item ${t.done ? 'done' : ''}">
-        <button class="task-toggle" data-id="${t.id}" aria-label="Toggle"></button>
+      <li class="task-item ${t.done ? 'done' : ''}" data-task-id="${t.id}">
+        <button class="task-toggle" data-id="${t.id}" aria-label="${t.done ? 'Mark not done' : 'Mark done'}"></button>
         <div class="task-main">
           <span class="task-title">${safe}</span>
           ${t.done ? '<span class="task-tag task-tag-done">done</span>' : makeTagHtml(t.category)}
@@ -629,26 +629,7 @@ async function loadTasks() {
 }
 
 taskListEl.addEventListener('click', async e => {
-  const toggleBtn = e.target.closest('[data-id]');
-  if (toggleBtn) {
-    attractToEdge(toggleBtn, 'left', 1200);
-    const id = toggleBtn.dataset.id;
-    try {
-      const res  = await fetch(`/api/tasks/${id}`, { method: 'PATCH' });
-      const data = await res.json();
-      tasks = tasks.map(t => t.id === parseInt(id) ? data.task : t);
-      updatePetUI(data.pet);
-      renderTasks();
-      if (data.task.done) {
-        addNotif('task_done', `"${data.task.title}" completed`);
-        react('task_done');
-      } else {
-        addNotif('task_undone', `"${data.task.title}" uncompleted`);
-        react('idle');
-      }
-    } catch (e) {}
-    return;
-  }
+  // Delete (✕) — checked first so it never doubles as a toggle
   const deleteBtn = e.target.closest('[data-delete-id]');
   if (deleteBtn) {
     const id = deleteBtn.dataset.deleteId;
@@ -660,7 +641,29 @@ taskListEl.addEventListener('click', async e => {
       if (deletedTask) addNotif('task_deleted', `"${deletedTask.title}" deleted`);
       react('task_deleted');
     } catch (e) {}
+    return;
   }
+
+  // Toggle — tap anywhere on the row (big, mobile-friendly target) to check/uncheck
+  const item = e.target.closest('.task-item');
+  if (!item || !item.dataset.taskId) return;
+  const id = item.dataset.taskId;
+  attractToEdge(item.querySelector('.task-toggle'), 'left', 1200);
+  try {
+    const res  = await fetch(`/api/tasks/${id}`, { method: 'PATCH' });
+    const data = await res.json();
+    if (!data || !data.task) return;
+    tasks = tasks.map(t => t.id === parseInt(id) ? data.task : t);
+    updatePetUI(data.pet);
+    renderTasks();
+    if (data.task.done) {
+      addNotif('task_done', `"${data.task.title}" completed`);
+      react('task_done');
+    } else {
+      addNotif('task_undone', `"${data.task.title}" uncompleted`);
+      react('idle');
+    }
+  } catch (e) {}
 });
 
 taskForm.addEventListener('submit', async e => {
@@ -3304,6 +3307,10 @@ blobEl.addEventListener('click', e => {
   if (didDrag) { didDrag = false; return; }
   openChat();
 });
+
+// Chat button in the home header
+const chatBtn = document.getElementById('chatBtn');
+if (chatBtn) chatBtn.addEventListener('click', () => openChat());
 
 // Mobile shake via accelerometer
 let lastMobileShake = 0;
