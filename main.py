@@ -51,14 +51,126 @@ def _parse_failed_generation(text: str):
     return name, parsed
 
 app = Flask(__name__)
-DB_PATH = 'tasks.db'
-GROQ_KEY = os.getenv('GROQ_API_KEY', '')  # set GROQ_API_KEY env var
+DB_PATH   = 'tasks.db'
+GROQ_KEY  = os.getenv('GROQ_API_KEY', '')  # set GROQ_API_KEY env var
+_DB_URL   = os.getenv('DATABASE_URL', '')
+_IS_PG    = bool(_DB_URL)
+
+if _IS_PG:
+    import psycopg2
+    import psycopg2.extras
+
+_INSERT_RE = re.compile(r'^\s*INSERT\b', re.I)
+_CREATE_RE = re.compile(r'^\s*CREATE\b', re.I)
+
+
+class _Row:
+    """Unified row object: supports dict-style and integer-index access for both DBs."""
+    def __init__(self, data):
+        self._d = {}
+        if data:
+            for k, v in (data.items() if hasattr(data, 'items') else enumerate(data)):
+                # Convert datetime objects (PostgreSQL) to ISO strings
+                self._d[k] = v.isoformat() if hasattr(v, 'isoformat') else v
+        self._vals = list(self._d.values())
+
+    def __getitem__(self, key):
+        return self._vals[key] if isinstance(key, int) else self._d[key]
+
+    def __iter__(self): return iter(self._d)
+    def __bool__(self): return bool(self._d)
+    def keys(self):   return self._d.keys()
+    def values(self): return self._d.values()
+    def items(self):  return self._d.items()
+    def get(self, k, default=None): return self._d.get(k, default)
+
+
+class _Cursor:
+    def __init__(self, raw):
+        self._c   = raw
+        self.lastrowid = None
+
+    def _adapt(self, sql):
+        """Transform SQLite SQL into PostgreSQL-compatible SQL."""
+        # Placeholders
+        sql = sql.replace('?', '%s')
+        # AUTOINCREMENT
+        sql = sql.replace('INTEGER PRIMARY KEY AUTOINCREMENT', 'SERIAL PRIMARY KEY')
+        # Double-quoted string literals → single-quoted (SQLite allows "val", PG does not)
+        sql = re.sub(r"\bDEFAULT\s+\"([^\"]+)\"", r"DEFAULT '\1'", sql)
+        # INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
+        if re.match(r'\s*INSERT\s+OR\s+IGNORE\b', sql, re.I):
+            sql = re.sub(r'(?i)INSERT\s+OR\s+IGNORE\b', 'INSERT', sql)
+            if 'ON CONFLICT' not in sql.upper():
+                sql = sql.rstrip('; ') + ' ON CONFLICT DO NOTHING'
+        # In CREATE TABLE: TEXT DEFAULT CURRENT_TIMESTAMP → TIMESTAMP DEFAULT NOW()
+        if _CREATE_RE.match(sql):
+            sql = sql.replace('TEXT DEFAULT CURRENT_TIMESTAMP', 'TIMESTAMP DEFAULT NOW()')
+        return sql
+
+    def execute(self, sql, params=()):
+        if _IS_PG:
+            sql = self._adapt(sql)
+            is_ins = bool(_INSERT_RE.match(sql))
+            # Append RETURNING id so we can get lastrowid without a second query
+            if is_ins and 'RETURNING' not in sql.upper():
+                sql = sql.rstrip('; ') + ' RETURNING id'
+        else:
+            is_ins = bool(_INSERT_RE.match(sql))
+
+        self._c.execute(sql, params or ())
+
+        if _IS_PG and is_ins:
+            try:
+                row = self._c.fetchone()
+                self.lastrowid = row['id'] if row else None
+            except Exception:
+                self.lastrowid = None
+        elif not _IS_PG:
+            self.lastrowid = self._c.lastrowid
+        return self
+
+    def fetchone(self):
+        row = self._c.fetchone()
+        if row is None:
+            return None
+        return _Row(row if _IS_PG else dict(row))
+
+    def fetchall(self):
+        rows = self._c.fetchall()
+        return [_Row(r if _IS_PG else dict(r)) for r in rows]
+
+
+class _Conn:
+    def __init__(self):
+        if _IS_PG:
+            self._raw = psycopg2.connect(_DB_URL)
+            self._factory = psycopg2.extras.RealDictCursor
+        else:
+            self._raw = sqlite3.connect(DB_PATH)
+            self._raw.row_factory = sqlite3.Row
+            self._factory = None
+
+    def execute(self, sql, params=()):
+        cur = self._raw.cursor(cursor_factory=self._factory) if _IS_PG else self._raw.cursor()
+        return _Cursor(cur).execute(sql, params)
+
+    def commit(self):
+        self._raw.commit()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, *_):
+        if exc_type:
+            try: self._raw.rollback()
+            except Exception: pass
+        try: self._raw.close()
+        except Exception: pass
 
 
 def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _Conn()
 
 
 

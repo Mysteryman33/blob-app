@@ -1,2 +1,3 @@
 flask
 groq
+psycopg2-binary
