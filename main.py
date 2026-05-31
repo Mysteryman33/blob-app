@@ -35,28 +35,46 @@ def _clean(text: str) -> str:
     return _RAW_TOOL_RE.sub('', text).strip().strip('"').strip("'")
 
 def _parse_failed_generation(text: str):
-    """Extract (tool_name, args_dict) from Groq's failed_generation string, or (None, {})."""
-    m = _FAILED_GEN_RE.search(text or '')
-    if not m:
-        return None, {}
-    # Groups 1+2 = new 8b format; groups 3+4 = old format
-    name = m.group(1) or m.group(3)
-    raw  = (m.group(2) or m.group(4) or '{}').strip()
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, list) and parsed:
-            parsed = parsed[0]
-        if not isinstance(parsed, dict):
+    """Extract every (tool_name, args_dict) from Groq's failed_generation string.
+
+    Returns a list so a single XML-format failure can still recover multiple
+    tool calls (e.g. "add milk and eggs"). Empty list when nothing parses."""
+    calls = []
+    for m in _FAILED_GEN_RE.finditer(text or ''):
+        # Groups 1+2 = new 8b format; groups 3+4 = old format
+        name = m.group(1) or m.group(3)
+        if not name:
+            continue
+        raw = (m.group(2) or m.group(4) or '{}').strip()
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):           # old format wrapped args in a list
+                parsed = next((x for x in parsed if isinstance(x, dict)), {})
+            if not isinstance(parsed, dict):
+                parsed = {}
+        except (json.JSONDecodeError, ValueError):
             parsed = {}
-    except (json.JSONDecodeError, ValueError):
-        parsed = {}
-    return name, parsed
+        calls.append((name, parsed))
+    return calls
 
 app = Flask(__name__)
 DB_PATH   = 'tasks.db'
 GROQ_KEY  = os.getenv('GROQ_API_KEY', '')  # set GROQ_API_KEY env var
+CHAT_MODEL      = os.getenv('CHAT_MODEL', 'openai/gpt-oss-20b')          # main tool-calling model
+SENTIMENT_MODEL = os.getenv('SENTIMENT_MODEL', 'llama-3.1-8b-instant')   # tiny tone-scoring model
 _DB_URL   = os.getenv('DATABASE_URL', '')
 _IS_PG    = bool(_DB_URL)
+
+# Default pet-stat changes when sentiment analysis is unavailable.
+_DEFAULT_EFFECTS = {'happiness': 1, 'energy': 0, 'familiarity': 1, 'expression': 'normal'}
+
+# Reuse one Groq client across requests instead of constructing one per call.
+_groq_client = None
+def _groq():
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = Groq(api_key=GROQ_KEY)
+    return _groq_client
 
 if _IS_PG:
     import psycopg2
@@ -136,6 +154,10 @@ class _Cursor:
         sql = sql.replace('INTEGER PRIMARY KEY AUTOINCREMENT', 'SERIAL PRIMARY KEY')
         # Double-quoted string literals → single-quoted (SQLite allows "val", PG does not)
         sql = re.sub(r"\bDEFAULT\s+\"([^\"]+)\"", r"DEFAULT '\1'", sql)
+        # SQLite scalar MIN(a,b)/MAX(a,b) → PG LEAST()/GREATEST() (PG MIN/MAX are aggregate-only).
+        # Safe: this codebase only uses the 2-arg scalar form, never aggregate MIN/MAX.
+        sql = re.sub(r'\bMIN\(', 'LEAST(', sql)
+        sql = re.sub(r'\bMAX\(', 'GREATEST(', sql)
         # INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
         if re.match(r'\s*INSERT\s+OR\s+IGNORE\b', sql, re.I):
             sql = re.sub(r'(?i)INSERT\s+OR\s+IGNORE\b', 'INSERT', sql)
@@ -492,12 +514,52 @@ def _norm_email(e):
     return (e or '').strip().lower()
 
 
+# ── Kiosk / single-device auto-login ────────────────────────────────────────────
+# When KIOSK_EMAIL is set (e.g. on the Raspberry Pi build) the device signs itself
+# in as that one hardcoded account on every request, so there's no login screen and
+# its data lives in the same store as the web app → instant cross-device sync. The
+# account is created on first use if it doesn't already exist. Both vars are unset
+# on the normal web/Render deploy, so auth there behaves exactly as before.
+KIOSK_EMAIL    = _norm_email(os.getenv('KIOSK_EMAIL', ''))
+KIOSK_PASSWORD = os.getenv('KIOSK_PASSWORD', '')
+_kiosk_uid = None
+
+
+def _resolve_kiosk_uid():
+    """uid of the hardcoded kiosk account, creating it once if it doesn't exist."""
+    global _kiosk_uid
+    if _kiosk_uid is not None:
+        return _kiosk_uid
+    if not KIOSK_EMAIL:
+        return None
+    with sysdb() as c:
+        row = c.execute('SELECT id FROM users WHERE email=?', (KIOSK_EMAIL,)).fetchone()
+        if row:
+            uid = row['id']
+        elif KIOSK_PASSWORD:
+            cur = c.execute('INSERT INTO users (email, password_hash) VALUES (?,?)',
+                            (KIOSK_EMAIL, generate_password_hash(KIOSK_PASSWORD)))
+            c.commit()
+            uid = cur.lastrowid
+        else:
+            return None
+    init_user_db(uid)            # ensure the account's private store exists
+    _kiosk_uid = uid
+    return uid
+
+
 @app.before_request
 def _auth_gate():
     p = request.path
     if p.startswith('/static/') or p in _PUBLIC_PATHS:
         return
     if session.get('uid'):
+        return
+    kid = _resolve_kiosk_uid()   # Pi build: auto-login as the hardcoded account
+    if kid:
+        session.permanent = True
+        session['uid']   = kid
+        session['email'] = KIOSK_EMAIL
         return
     if p.startswith('/api/'):
         return jsonify(error='authentication required'), 401
@@ -703,7 +765,7 @@ def nudge():
     )
 
     try:
-        client = Groq(api_key=GROQ_KEY)
+        client = _groq()
         resp = client.chat.completions.create(
             model="openai/gpt-oss-20b",
             messages=[{"role": "user", "content": prompt}],
@@ -792,7 +854,7 @@ def pet_react():
     )
 
     try:
-        client = Groq(api_key=GROQ_KEY)
+        client = _groq()
         resp = client.chat.completions.create(
             model="openai/gpt-oss-20b",
             messages=[{"role": "user", "content": prompt}],
@@ -1500,7 +1562,7 @@ Rules:
 - Be specific to THIS user's data, not generic"""
 
     try:
-        client = Groq(api_key=GROQ_KEY)
+        client = _groq()
         resp = client.chat.completions.create(
             model='openai/gpt-oss-20b',
             messages=[
@@ -1903,6 +1965,20 @@ _FOCUS_VOICES = {
         'friendly':  'GOAL COMPLETE!! SO PROUD OF YOU!!',
         'bonded':    'YOU DID IT!!! GOAL COMPLETE!!! LEGENDARY!!!',
     },
+    'habit_checked': {
+        'terrified': 'c-checked off... good',
+        'shy':       'checked it off! nice.',
+        'cautious':  'checked in! streak going.',
+        'friendly':  'checked in!! keep that streak!!',
+        'bonded':    'CHECKED IN!! STREAK ALIVE!! LETS GO!!',
+    },
+    'already_done': {
+        'terrified': 'a-already done today...',
+        'shy':       'you already did that one today!',
+        'cautious':  'already checked in today!',
+        'friendly':  "already done today!! you're on it!!",
+        'bonded':    'ALREADY DONE TODAY!! YOU MACHINE!!',
+    },
 }
 
 def _immediate_reply(focus_result, tier_name):
@@ -2172,9 +2248,9 @@ def _sentiment_effects(message: str) -> dict:
     """Tiny parallel Groq call — maps message tone to pet stat changes."""
     _default = {'happiness': 1, 'energy': 0, 'familiarity': 1, 'expression': 'normal'}
     try:
-        client = Groq(api_key=GROQ_KEY)
+        client = _groq()
         resp = client.chat.completions.create(
-            model='llama-3.1-8b-instant',
+            model=SENTIMENT_MODEL,
             messages=[
                 {'role': 'system', 'content': (
                     'Return ONLY a JSON object (no other text) with these fields:\n'
@@ -2249,6 +2325,116 @@ def equip_shop_item():
 
 
 # ── Chat ──────────────────────────────────────────────────────────────────────
+_CONFIRM_VOICES = {
+    'terrified': 'um... d-do you want this?...',
+    'shy':       'should i... do this?',
+    'cautious':  'want me to go ahead?',
+    'friendly':  'okay! should i do this?',
+    'bonded':    'SAY YES AND I WILL!!',
+}
+
+
+def _action_label(name, args, tasks_by_id, habits_by_id, goals_by_id):
+    """One human-readable summary of a proposed action for the confirm card.
+    Single source of truth shared by the native and XML-recovery tool paths."""
+    if name == 'create_task':
+        return f"add \"{args.get('title', '')}\" · {args.get('category', 'general')}"
+    if name == 'delete_task':
+        t = tasks_by_id.get(args.get('task_id'))
+        return f"delete \"{t['title'] if t else 'unknown task'}\""
+    if name == 'complete_task':
+        t = tasks_by_id.get(args.get('task_id'))
+        word = 'complete' if args.get('done') else 'uncomplete'
+        return f"{word} \"{t['title'] if t else 'unknown task'}\""
+    if name == 'update_task':
+        t = tasks_by_id.get(args.get('task_id'))
+        changes = []
+        if 'title' in args:    changes.append(f'rename to "{args["title"]}"')
+        if 'category' in args: changes.append(f'move to {args["category"]}')
+        return f"update \"{t['title'] if t else 'unknown task'}\": {', '.join(changes) or 'no change'}"
+    if name == 'add_habit':
+        return f"add habit \"{args.get('title', '')}\" · {args.get('difficulty', 'medium')}"
+    if name == 'remove_habit':
+        h = habits_by_id.get(args.get('habit_id'))
+        return f"delete habit \"{h['title'] if h else 'unknown'}\""
+    if name == 'pause_habit':
+        h = habits_by_id.get(args.get('habit_id'))
+        action = 'resume' if (h and h['paused']) else 'pause'
+        return f"{action} habit \"{h['title'] if h else 'unknown'}\""
+    if name == 'update_habit':
+        h = habits_by_id.get(args.get('habit_id'))
+        changes = []
+        if 'title' in args:      changes.append(f'rename to "{args["title"]}"')
+        if 'difficulty' in args: changes.append(f'set difficulty to {args["difficulty"]}')
+        return f"update habit \"{h['title'] if h else 'unknown'}\": {', '.join(changes) or 'no change'}"
+    if name == 'add_goal':
+        dl = f" · due {args['deadline']}" if args.get('deadline') else ''
+        return f"add goal \"{args.get('title', '')}\" · {args.get('category', 'personal')}{dl}"
+    if name == 'delete_goal':
+        g = goals_by_id.get(args.get('goal_id'))
+        return f"delete goal \"{g['title'] if g else 'unknown'}\""
+    if name == 'add_milestone':
+        g = goals_by_id.get(args.get('goal_id'))
+        return f"add step \"{args.get('text', '')}\" → \"{g['title'] if g else 'goal'}\""
+    if name == 'link_habit_to_goal':
+        g = goals_by_id.get(args.get('goal_id'))
+        h = habits_by_id.get(args.get('habit_id'))
+        return f"link \"{h['title'] if h else 'habit'}\" → goal \"{g['title'] if g else 'goal'}\""
+    return name
+
+
+def _process_tool_calls(calls, tasks_by_id, habits_by_id, goals_by_id):
+    """Run a list of (name, args) tool calls. IMMEDIATE tools execute now;
+    PROPOSED tools are collected for user confirmation.
+    Returns (focus_result, proposed_actions)."""
+    known = {s['name'] for s in _SKILL_REGISTRY}
+    focus_result = None
+    proposed_actions = []
+    for name, args in calls:
+        if name not in known:
+            log.warning('Unknown tool name from model: %r', name)
+            continue
+        if not isinstance(args, dict):
+            args = {}
+        if name in IMMEDIATE_SKILLS:
+            focus_result = {**execute_task_tool(name, args), 'tool': name}
+        else:
+            proposed_actions.append({
+                'name': name, 'args': args,
+                'label': _action_label(name, args, tasks_by_id, habits_by_id, goals_by_id),
+            })
+    return focus_result, proposed_actions
+
+
+def _chat_reply(focus_result, proposed_actions, tier_name):
+    """Blob's spoken reply given what it just did / wants to confirm."""
+    if proposed_actions:
+        prefix = ''
+        if focus_result:
+            if   focus_result.get('focus_started'): prefix = f"focus started for \"{focus_result.get('task_title', '')}\". "
+            elif focus_result.get('pause_focus'):   prefix = 'paused! '
+            elif focus_result.get('resume_focus'):  prefix = 'resumed! '
+            elif focus_result.get('stop_focus'):    prefix = 'stopped! '
+            elif focus_result.get('skip_focus'):    prefix = 'skipped! '
+        return prefix + _CONFIRM_VOICES.get(tier_name, 'want me to do this?')
+    return _immediate_reply(focus_result, tier_name)
+
+
+def _bonus_familiarity(equipped):
+    """Extra familiarity per chat from equipped items (stacks)."""
+    return (1 if 'sunglasses' in equipped else 0) \
+         + (1 if 'angel_wings' in equipped else 0) \
+         + (2 if 'halo' in equipped else 0)
+
+
+def _effects_with_bonus(sentiment, fam_bonus):
+    """Sentiment-driven stat changes plus any equipped familiarity bonus."""
+    effects = dict(sentiment or _DEFAULT_EFFECTS)
+    if fam_bonus:
+        effects['familiarity'] = effects.get('familiarity', 1) + fam_bonus
+    return effects
+
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     d = request.json or {}
@@ -2287,6 +2473,7 @@ def chat():
         habit_rows  = c.execute('SELECT id, title, difficulty, streak, last_done, paused FROM habits ORDER BY created_at DESC').fetchall()
         goal_ids    = [r['id'] for r in c.execute('SELECT id FROM goals ORDER BY created_at DESC').fetchall()]
         goal_rows   = [_goal_full(c, gid) for gid in goal_ids]
+        fam_bonus   = _bonus_familiarity(get_equipped_items(c))   # read once; state won't change mid-call
     task_lines  = [f"#{r['id']} [{r['category']}] {r['title']} ({'done' if r['done'] else 'pending'})"
                    for r in rows]
     today_str   = datetime.now().strftime('%Y-%m-%d')
@@ -2356,7 +2543,14 @@ def chat():
         "   When adding a goal, if category or deadline aren't clear, ask ONE short question first. "
         "   Use the goal IDs and milestone IDs from context to reference them precisely.\n"
         "8. QUALITY: Your personality (shy/excited/etc.) affects TONE only — never sacrifice helpfulness or completeness. "
-        "   Always clearly confirm what was done or proposed, regardless of tier."
+        "   Always clearly confirm what was done or proposed, regardless of tier.\n"
+        "9. MULTIPLE ACTIONS: If the user asks for more than one thing, emit a SEPARATE tool call for EVERY "
+        "   item in the SAME response — never collapse them into one and never stop after the first. This applies "
+        "   even when the items are different types of action. Examples:\n"
+        "     'add buy milk and walk the dog' → create_task(\"buy milk\") + create_task(\"walk the dog\").\n"
+        "     'add a task to call mom and a habit to drink water' → create_task(\"call mom\") + add_habit(\"drink water\").\n"
+        "     'delete tasks 3 and 5' → delete_task(3) + delete_task(5).\n"
+        "   Split lists on 'and', commas, or newlines. Reuse the IDs from context for each item."
     )
 
     tools = _build_tools(safe_cats)
@@ -2372,211 +2566,66 @@ def chat():
         'bonded':    ['ON IT!!', 'DONE!!', 'YEP!!'],
     }
 
+    # Maps of current items, built lazily — both tool paths reference them by id.
+    def _id_maps():
+        return ({r['id']: r for r in rows},
+                {h['id']: h for h in habit_rows},
+                {g['id']: g for g in goal_rows})
+
     # ── Groq API call — only catch network/auth errors here ───────────────────
     try:
-        client = Groq(api_key=GROQ_KEY)
+        client = _groq()
         resp = client.chat.completions.create(
-            model='openai/gpt-oss-20b',
+            model=CHAT_MODEL,
             messages=[{'role': 'system', 'content': system}] + msgs,
             tools=tools,
             tool_choice='auto',
-            temperature=0.85,
-            max_completion_tokens=400,
+            temperature=0.6,            # steadier tool selection than chat-default; voice still comes through
+            max_completion_tokens=768,  # room for several tool calls in one reply (multi-action requests)
             stream=False,
         )
         log_usage(resp, 'chat')
     except Exception as exc:
-        # Groq returns 400 tool_use_failed when the model generates XML tool syntax
-        # instead of the API tool_calls format. The intended call is still in failed_generation.
+        # Groq returns 400 tool_use_failed when the model emits XML tool syntax
+        # instead of the API tool_calls format. The intended calls are still in
+        # failed_generation — recover them through the SAME path as native calls.
         err_body = getattr(exc, 'body', None)
         err_info = (err_body or {}).get('error', {}) if isinstance(err_body, dict) else {}
         if err_info.get('code') == 'tool_use_failed':
-            name, args = _parse_failed_generation(err_info.get('failed_generation', ''))
             known = {s['name'] for s in _SKILL_REGISTRY}
-            if name and name in known:
-                log.info('Recovered tool_use_failed: %s %s', name, args)
-                if name in IMMEDIATE_SKILLS:
-                    focus_result = {**execute_task_tool(name, args), 'tool': name}
-                    reply = _immediate_reply(focus_result, tier_name)
-                    _sentiment_thread.join(timeout=5)
-                    return jsonify(
-                        message=reply,
-                        focus_result=focus_result,
-                        proposed_actions=[],
-                        effects=_sentiment or {'happiness': 1, 'energy': 0, 'familiarity': 1, 'expression': 'normal'}
-                    )
-                else:
-                    task_by_id  = {r['id']: r for r in rows}
-                    habit_by_id = {h['id']: h for h in habit_rows}
-                    goal_by_id  = {g['id']: g for g in goal_rows}
-                    if name == 'create_task':
-                        cat   = args.get('category', 'general')
-                        label = f"add \"{args.get('title', '')}\" · {cat}"
-                    elif name == 'delete_task':
-                        t     = task_by_id.get(args.get('task_id'))
-                        label = f"delete \"{t['title'] if t else 'unknown task'}\""
-                    elif name == 'complete_task':
-                        t    = task_by_id.get(args.get('task_id'))
-                        word = 'complete' if args.get('done') else 'uncomplete'
-                        label = f"{word} \"{t['title'] if t else 'unknown task'}\""
-                    elif name == 'add_habit':
-                        diff  = args.get('difficulty', 'medium')
-                        label = f"add habit \"{args.get('title', '')}\" · {diff}"
-                    elif name == 'add_goal':
-                        cat = args.get('category', 'personal')
-                        dl  = f" · due {args['deadline']}" if args.get('deadline') else ''
-                        label = f"add goal \"{args.get('title', '')}\" · {cat}{dl}"
-                    else:
-                        label = name
-                    _confirm_voices = {
-                        'terrified': 'um... d-do you want this?...',
-                        'shy':       'should i... do this?',
-                        'cautious':  'want me to go ahead?',
-                        'friendly':  'okay! should i do this?',
-                        'bonded':    'SAY YES AND I WILL!!',
-                    }
-                    reply = _confirm_voices.get(tier_name, 'want me to do this?')
-                    _sentiment_thread.join(timeout=5)
-                    return jsonify(
-                        message=reply,
-                        focus_result=None,
-                        proposed_actions=[{'name': name, 'args': args, 'label': label}],
-                        effects=_sentiment or {'happiness': 1, 'energy': 0, 'familiarity': 1, 'expression': 'normal'}
-                    )
+            calls = [(n, a) for n, a in _parse_failed_generation(err_info.get('failed_generation', '')) if n in known]
+            if calls:
+                log.info('Recovered tool_use_failed: %s', calls)
+                focus_result, proposed_actions = _process_tool_calls(calls, *_id_maps())
+                reply = _chat_reply(focus_result, proposed_actions, tier_name)
+                _sentiment_thread.join(timeout=5)
+                return jsonify(message=reply, focus_result=focus_result,
+                               proposed_actions=proposed_actions,
+                               effects=_effects_with_bonus(_sentiment, fam_bonus))
         log.error('Groq API error in /api/chat: %s', exc)
         reply = random.choice(_fallbacks.get(tier_name, _fallbacks['cautious']))
         _sentiment_thread.join(timeout=5)
-        return jsonify(message=reply, effects=_sentiment or {'happiness': 1, 'energy': 0, 'familiarity': 1, 'expression': 'normal'})
+        return jsonify(message=reply, effects=_effects_with_bonus(_sentiment, fam_bonus))
 
     # Main call finished — sentiment thread should be done or very close
     _sentiment_thread.join(timeout=5)
-    effects = _sentiment or {'happiness': 1, 'energy': 0, 'familiarity': 1, 'expression': 'normal'}
-    # Sunglasses bonus: +1 familiarity per message
-    with db() as _c:
-        _eq = get_equipped_items(_c)
-        if 'sunglasses'  in _eq: effects = dict(effects); effects['familiarity'] = effects.get('familiarity', 1) + 1
-        if 'angel_wings' in _eq: effects = dict(effects); effects['familiarity'] = effects.get('familiarity', 1) + 1
-        if 'halo'        in _eq: effects = dict(effects); effects['familiarity'] = effects.get('familiarity', 1) + 2
+    effects = _effects_with_bonus(_sentiment, fam_bonus)
 
     asst = resp.choices[0].message
 
     # ── Tool call handling ─────────────────────────────────────────────────────
     if asst.tool_calls:
-        task_by_id = {r['id']: r for r in rows}
-        focus_result = None
-        proposed_actions = []
-
+        calls = []
         for tc in asst.tool_calls:
             try:
                 args = json.loads(tc.function.arguments or '{}')
-                if not isinstance(args, dict):
-                    args = {}
             except (json.JSONDecodeError, ValueError):
                 log.warning('Malformed tool arguments from model: %r', tc.function.arguments)
                 continue
+            calls.append((tc.function.name, args if isinstance(args, dict) else {}))
 
-            name = tc.function.name
-            if name not in {s['name'] for s in _SKILL_REGISTRY}:
-                log.warning('Unknown tool name from model: %r', name)
-                continue
-
-            habit_by_id = {h['id']: h for h in habit_rows}
-            goal_by_id  = {g['id']: g for g in goal_rows}
-
-            if name in IMMEDIATE_SKILLS:
-                r = execute_task_tool(name, args)
-                focus_result = {**r, 'tool': name}
-            else:
-                if name == 'create_task':
-                    cat = args.get('category', 'general')
-                    label = f"add \"{args.get('title', '')}\" · {cat}"
-                elif name == 'delete_task':
-                    t = task_by_id.get(args.get('task_id'))
-                    title = t['title'] if t else 'unknown task'
-                    label = f"delete \"{title}\""
-                elif name == 'complete_task':
-                    t = task_by_id.get(args.get('task_id'))
-                    title = t['title'] if t else 'unknown task'
-                    word = 'complete' if args.get('done') else 'uncomplete'
-                    label = f"{word} \"{title}\""
-                elif name == 'update_task':
-                    t = task_by_id.get(args.get('task_id'))
-                    old_title = t['title'] if t else 'unknown task'
-                    changes = []
-                    if 'title' in args:
-                        changes.append(f'rename to "{args["title"]}"')
-                    if 'category' in args:
-                        changes.append(f'move to {args["category"]}')
-                    label = f"update \"{old_title}\": {', '.join(changes) or 'no change'}"
-                elif name == 'add_habit':
-                    diff  = args.get('difficulty', 'medium')
-                    label = f"add habit \"{args.get('title', '')}\" · {diff}"
-                elif name == 'remove_habit':
-                    h = habit_by_id.get(args.get('habit_id'))
-                    label = f"delete habit \"{h['title'] if h else 'unknown'}\""
-                elif name == 'pause_habit':
-                    h = habit_by_id.get(args.get('habit_id'))
-                    h_title = h['title'] if h else 'unknown'
-                    action  = 'resume' if (h and h['paused']) else 'pause'
-                    label   = f"{action} habit \"{h_title}\""
-                elif name == 'update_habit':
-                    h = habit_by_id.get(args.get('habit_id'))
-                    h_title = h['title'] if h else 'unknown'
-                    changes = []
-                    if 'title' in args:      changes.append(f'rename to "{args["title"]}"')
-                    if 'difficulty' in args: changes.append(f'set difficulty to {args["difficulty"]}')
-                    label = f"update habit \"{h_title}\": {', '.join(changes) or 'no change'}"
-                elif name == 'add_goal':
-                    cat   = args.get('category', 'personal')
-                    dl    = f" · due {args['deadline']}" if args.get('deadline') else ''
-                    label = f"add goal \"{args.get('title', '')}\" · {cat}{dl}"
-                elif name == 'delete_goal':
-                    g = goal_by_id.get(args.get('goal_id'))
-                    label = f"delete goal \"{g['title'] if g else 'unknown'}\""
-                elif name == 'add_milestone':
-                    g = goal_by_id.get(args.get('goal_id'))
-                    label = f"add step \"{args.get('text','')}\" → \"{g['title'] if g else 'goal'}\""
-                elif name == 'link_habit_to_goal':
-                    g = goal_by_id.get(args.get('goal_id'))
-                    h = habit_by_id.get(args.get('habit_id'))
-                    label = f"link \"{h['title'] if h else 'habit'}\" → goal \"{g['title'] if g else 'goal'}\""
-                else:
-                    label = name
-                proposed_actions.append({'name': name, 'args': args, 'label': label})
-
-        follow = msgs + [{
-            'role': 'assistant',
-            'content': asst.content or '',
-            'tool_calls': [
-                {'id': tc.id, 'type': 'function',
-                 'function': {'name': tc.function.name, 'arguments': tc.function.arguments}}
-                for tc in asst.tool_calls
-            ]
-        }]
-        for tc in asst.tool_calls:
-            is_focus = tc.function.name in IMMEDIATE_SKILLS
-            follow.append({'role': 'tool', 'tool_call_id': tc.id,
-                           'content': 'executed immediately' if is_focus else 'pending user approval'})
-
-        if proposed_actions:
-            _confirm_voices = {
-                'terrified': 'um... d-do you want this?...',
-                'shy':       'should i... do this?',
-                'cautious':  'want me to go ahead?',
-                'friendly':  'okay! should i do this?',
-                'bonded':    'SAY YES AND I WILL!!',
-            }
-            focus_prefix = ''
-            if focus_result:
-                if focus_result.get('focus_started'):
-                    focus_prefix = f"focus started for \"{focus_result.get('task_title','')}\". "
-                elif focus_result.get('pause_focus'):  focus_prefix = 'paused! '
-                elif focus_result.get('resume_focus'): focus_prefix = 'resumed! '
-                elif focus_result.get('stop_focus'):   focus_prefix = 'stopped! '
-                elif focus_result.get('skip_focus'):   focus_prefix = 'skipped! '
-            reply = focus_prefix + _confirm_voices.get(tier_name, 'want me to do this?')
-        else:
-            reply = _immediate_reply(focus_result, tier_name)
+        focus_result, proposed_actions = _process_tool_calls(calls, *_id_maps())
+        reply = _chat_reply(focus_result, proposed_actions, tier_name)
 
         return jsonify(
             message=reply,
