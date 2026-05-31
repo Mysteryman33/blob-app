@@ -873,7 +873,18 @@
             </svg>
           </button>
         </div>
-        <ul class="item-list" id="journalList"><li class="empty-state">no entries yet</li></ul>
+
+        <div class="journal-stats" id="journalStats"></div>
+
+        <button class="journal-prompt" id="journalPrompt" type="button">
+          <span class="journal-prompt-icon">✦</span>
+          <span class="journal-prompt-text" id="journalPromptText">how are you feeling right now?</span>
+          <span class="journal-prompt-refresh" id="journalPromptRefresh" aria-label="New prompt">⟳</span>
+        </button>
+
+        <div class="journal-reflection hidden" id="journalReflection"></div>
+
+        <ul class="item-list journal-list" id="journalList"><li class="empty-state">no entries yet</li></ul>
       </div>
 
       <!-- ══════════════ SCREEN: MEMORIES ══════════════ -->
@@ -1021,6 +1032,9 @@
         </div>
         <div class="chat-input-row">
           <input type="text" class="chat-input" id="chatInput" placeholder="say something..." maxlength="200" autocomplete="off" />
+          <button type="button" class="mic-btn chat-mic-btn" data-mic-target="chatInput" aria-label="Voice input" title="Speak">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          </button>
           <button class="chat-send-btn" id="chatSendBtn" aria-label="Send">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
               <polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -1247,7 +1261,12 @@
         <button class="modal-close" id="closeModal">✕</button>
       </div>
       <form id="taskForm">
-        <input type="text" id="taskInput" placeholder="what do you need to do?" maxlength="80" autocomplete="off" />
+        <div class="field-with-mic">
+          <input type="text" id="taskInput" placeholder="what do you need to do?" maxlength="80" autocomplete="off" />
+          <button type="button" class="mic-btn" data-mic-target="taskInput" aria-label="Voice input" title="Speak">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          </button>
+        </div>
         <div class="category-chips" id="categoryChips"></div>
         <div class="modal-actions">
           <button type="button" class="btn-secondary" id="cancelModal">cancel</button>
@@ -1265,8 +1284,19 @@
         <button class="modal-close" id="closeContentModal">✕</button>
       </div>
       <form id="contentForm">
-        <input type="text" id="contentInput" placeholder="" maxlength="120" autocomplete="off" />
-        <textarea id="contentTextarea" placeholder="" maxlength="800" rows="4"></textarea>
+        <div class="mood-picker hidden" id="moodPicker"></div>
+        <div class="field-with-mic">
+          <input type="text" id="contentInput" placeholder="" maxlength="120" autocomplete="off" />
+          <button type="button" class="mic-btn" data-mic-target="contentInput" aria-label="Voice input" title="Speak">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          </button>
+        </div>
+        <div class="field-with-mic">
+          <textarea id="contentTextarea" placeholder="" maxlength="800" rows="4"></textarea>
+          <button type="button" class="mic-btn" data-mic-target="contentTextarea" aria-label="Voice input" title="Speak">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          </button>
+        </div>
         <select id="contentSelect"></select>
         <div class="modal-actions">
           <button type="button" class="btn-secondary" id="cancelContentModal">cancel</button>

@@ -309,7 +309,7 @@ function showScreen(name, from) {
   if (name === 'habits') loadHabits();
   if (name === 'goals') loadGoals();
   if (name === 'navigation') loadNavigation();
-  if (name === 'journal') loadJournal();
+  if (name === 'journal') { loadJournal(); newJournalPrompt(); document.getElementById('journalReflection')?.classList.add('hidden'); }
   if (name === 'settings') loadUsage();
   scheduleNextRest(1000);
 }
@@ -726,6 +726,8 @@ const CONTENT_CONFIGS = {
   journal: { title:'new entry',      field:'textarea', placeholder:'how are you feeling today?',   select:null,                                  apiPath:'/api/journal', bodyKey:'text'                         },
 };
 
+const fieldWrap = el => el.closest('.field-with-mic') || el;
+
 function openContentModal(type) {
   const cfg = CONTENT_CONFIGS[type];
   if (!cfg) return;
@@ -733,13 +735,13 @@ function openContentModal(type) {
   document.getElementById('contentModalTitle').textContent = cfg.title;
 
   if (cfg.field === 'textarea') {
-    contentInputEl.style.display    = 'none';
-    contentTextareaEl.style.display = 'block';
+    fieldWrap(contentInputEl).style.display    = 'none';
+    fieldWrap(contentTextareaEl).style.display = 'block';
     contentTextareaEl.placeholder   = cfg.placeholder;
     contentTextareaEl.value         = '';
   } else {
-    contentInputEl.style.display    = 'block';
-    contentTextareaEl.style.display = 'none';
+    fieldWrap(contentInputEl).style.display    = 'block';
+    fieldWrap(contentTextareaEl).style.display = 'none';
     contentInputEl.placeholder      = cfg.placeholder;
     contentInputEl.value            = '';
   }
@@ -751,8 +753,47 @@ function openContentModal(type) {
     contentSelectEl.style.display = 'none';
   }
 
+  // Mood picker only for journal entries
+  renderMoodPicker(type === 'journal');
+  if (type === 'journal' && _pendingPrompt) {
+    contentTextareaEl.placeholder = _pendingPrompt;
+    _pendingPrompt = null;
+  }
+
   contentModal.classList.remove('hidden');
   setTimeout(() => (cfg.field === 'textarea' ? contentTextareaEl : contentInputEl).focus(), 60);
+}
+
+// ── Moods ───────────────────────────────────────────────────────────────────
+const MOODS = [
+  { id:'great', emoji:'😄', label:'great', color:'#4ade80' },
+  { id:'good',  emoji:'🙂', label:'good',  color:'#a3e635' },
+  { id:'okay',  emoji:'😐', label:'okay',  color:'#facc15' },
+  { id:'low',   emoji:'😔', label:'low',   color:'#fb923c' },
+  { id:'rough', emoji:'😢', label:'rough', color:'#f87171' },
+];
+const moodById = id => MOODS.find(m => m.id === id);
+let selectedMood = '';
+let _pendingPrompt = null;
+
+function renderMoodPicker(show) {
+  const picker = document.getElementById('moodPicker');
+  if (!picker) return;
+  selectedMood = '';
+  if (!show) { picker.classList.add('hidden'); picker.innerHTML = ''; return; }
+  picker.classList.remove('hidden');
+  picker.innerHTML = MOODS.map(m =>
+    `<button type="button" class="mood-chip" data-mood="${m.id}" style="--mood:${m.color}">
+       <span class="mood-emoji">${m.emoji}</span><span class="mood-label">${m.label}</span>
+     </button>`).join('');
+  picker.querySelectorAll('.mood-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const was = chip.classList.contains('selected');
+      picker.querySelectorAll('.mood-chip').forEach(c => c.classList.remove('selected'));
+      if (was) { selectedMood = ''; }
+      else { chip.classList.add('selected'); selectedMood = chip.dataset.mood; }
+    });
+  });
 }
 
 function closeContentModal() {
@@ -775,6 +816,7 @@ contentForm.addEventListener('submit', async e => {
 
   const body = { [cfg.bodyKey]: text };
   if (cfg.extraKey) body[cfg.extraKey] = contentSelectEl.value;
+  if (contentModalType === 'journal' && selectedMood) body.mood = selectedMood;
 
   try {
     await fetch(cfg.apiPath, {
@@ -783,7 +825,9 @@ contentForm.addEventListener('submit', async e => {
       body: JSON.stringify(body)
     });
     const savedType = contentModalType;
+    const savedText = text, savedMood = selectedMood;
     closeContentModal();
+    if (savedType === 'journal') fetchJournalReflection(savedText, savedMood);
 
     const notifTypeMap = { focus:'focus_added', goal:'goal_added', habit:'habit_added', journal:'journal_added' };
     const notifMsgMap  = {
@@ -1927,22 +1971,127 @@ document.getElementById('navTabs').addEventListener('click', e => {
 });
 
 // ── Journal ───────────────────────────────────────────────────────────────────
+const JOURNAL_PROMPTS = [
+  'how are you feeling right now?',
+  'what is one thing you are grateful for today?',
+  'what is taking up most of your headspace?',
+  'describe a small win from today.',
+  'what would make tomorrow feel good?',
+  'what is something you need to let go of?',
+  'who or what made you smile recently?',
+  'what is something you are proud of lately?',
+  'what is draining your energy right now?',
+  'if today had a color, what would it be and why?',
+  'what is one kind thing you can do for yourself?',
+  'what is on your mind that you haven\'t said out loud?',
+];
+
+function dayKey(iso) {
+  const d = new Date((iso || '').replace(' ', 'T'));
+  return isNaN(d) ? 'unknown' : d.toISOString().slice(0, 10);
+}
+function dayLabel(iso) {
+  const k = dayKey(iso);
+  const today = new Date().toISOString().slice(0, 10);
+  const yest  = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  if (k === today) return 'today';
+  if (k === yest)  return 'yesterday';
+  const d = new Date(k);
+  return isNaN(d) ? 'earlier' : d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+}
+
+function journalStreak(entries) {
+  const days = new Set(entries.map(j => dayKey(j.created_at)));
+  let streak = 0;
+  let cur = new Date(); cur.setHours(0,0,0,0);
+  // allow today to be empty without breaking a streak that ran up to yesterday
+  if (!days.has(cur.toISOString().slice(0,10))) cur = new Date(cur - 864e5);
+  while (days.has(cur.toISOString().slice(0,10))) { streak++; cur = new Date(cur - 864e5); }
+  return streak;
+}
+
+function renderJournalStats(entries) {
+  const el = document.getElementById('journalStats');
+  if (!el) return;
+  const weekAgo = Date.now() - 7 * 864e5;
+  const week = entries.filter(j => new Date((j.created_at||'').replace(' ','T')) >= weekAgo).length;
+  const streak = journalStreak(entries);
+  el.innerHTML = `
+    <div class="journal-stat"><span class="journal-stat-num">${entries.length}</span><span class="journal-stat-lbl">entries</span></div>
+    <div class="journal-stat"><span class="journal-stat-num">${streak}🔥</span><span class="journal-stat-lbl">day streak</span></div>
+    <div class="journal-stat"><span class="journal-stat-num">${week}</span><span class="journal-stat-lbl">this week</span></div>`;
+}
+
 async function loadJournal() {
   try {
     const res  = await fetch('/api/journal');
     const data = await res.json();
     const el   = document.getElementById('journalList');
+    renderJournalStats(data);
     if (!data.length) { el.innerHTML = '<li class="empty-state">no entries yet — how are you feeling?</li>'; return; }
-    el.innerHTML = data.map(j => `
-      <li class="item-card">
-        <div class="item-card-top">
-          <span class="item-card-text">${esc(j.text)}</span>
-          <button class="item-card-delete" data-del-journal="${j.id}">✕</button>
-        </div>
-        <span class="item-card-date" style="margin-top:2px;">${fmtDate(j.created_at)}</span>
-      </li>`).join('');
+
+    let html = '', lastDay = null;
+    data.forEach(j => {
+      const dl = dayLabel(j.created_at);
+      if (dl !== lastDay) { html += `<li class="journal-day-sep">${dl}</li>`; lastDay = dl; }
+      const m = moodById(j.mood);
+      const accent = m ? m.color : 'rgba(255,255,255,0.12)';
+      const moodTag = m ? `<span class="journal-mood" style="--mood:${m.color}">${m.emoji} ${m.label}</span>` : '';
+      html += `
+        <li class="item-card journal-entry" style="--accent:${accent}">
+          <div class="item-card-top">
+            <span class="item-card-text">${esc(j.text)}</span>
+            <button class="item-card-delete" data-del-journal="${j.id}">✕</button>
+          </div>
+          <div class="journal-entry-foot">
+            ${moodTag}
+            <span class="item-card-date">${fmtTime(j.created_at)}</span>
+          </div>
+        </li>`;
+    });
+    el.innerHTML = html;
   } catch(e) {}
 }
+
+function fmtTime(iso) {
+  const d = new Date((iso || '').replace(' ', 'T'));
+  if (isNaN(d)) return fmtDate(iso);
+  return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+}
+
+async function fetchJournalReflection(text, mood) {
+  const box = document.getElementById('journalReflection');
+  if (!box) return;
+  box.classList.remove('hidden');
+  box.innerHTML = `<span class="journal-reflection-blob">💭</span><span class="journal-reflection-text">…</span>`;
+  try {
+    const res = await fetch('/api/journal/reflect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, mood })
+    });
+    const data = await res.json();
+    if (data && data.reflection) {
+      box.innerHTML = `<span class="journal-reflection-blob">💭</span><span class="journal-reflection-text">${esc(data.reflection)}</span>`;
+    } else {
+      box.classList.add('hidden');
+    }
+  } catch (_) { box.classList.add('hidden'); }
+}
+
+// Rotating writing prompt
+function newJournalPrompt() {
+  const el = document.getElementById('journalPromptText');
+  if (!el) return;
+  let next = el.textContent;
+  while (next === el.textContent && JOURNAL_PROMPTS.length > 1)
+    next = JOURNAL_PROMPTS[Math.floor(Math.random() * JOURNAL_PROMPTS.length)];
+  el.textContent = next;
+}
+document.getElementById('journalPromptRefresh')?.addEventListener('click', e => { e.stopPropagation(); newJournalPrompt(); });
+document.getElementById('journalPrompt')?.addEventListener('click', () => {
+  _pendingPrompt = document.getElementById('journalPromptText').textContent;
+  openContentModal('journal');
+});
 
 document.getElementById('journalList').addEventListener('click', async e => {
   const btn = e.target.closest('[data-del-journal]');
@@ -3741,6 +3890,43 @@ async function init() {
   react('welcome');
   requestAnimationFrame(animateBlob);
   scheduleNextRest(2000);
+  initSTT();
+}
+
+// ── Speech-to-text (Web Speech API) ─────────────────────────────────────────
+// Wires every .mic-btn to its target field. Tap to dictate; tap again to stop.
+// Transcribed text is appended to whatever is already typed. Hidden entirely
+// when the browser has no SpeechRecognition support.
+function initSTT() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const mics = document.querySelectorAll('.mic-btn');
+  if (!SR) { mics.forEach(m => (m.style.display = 'none')); return; }
+
+  mics.forEach(btn => {
+    const target = document.getElementById(btn.dataset.micTarget);
+    if (!target) { btn.style.display = 'none'; return; }
+    let rec = null, listening = false, baseText = '';
+
+    btn.addEventListener('click', () => {
+      if (listening) { try { rec.stop(); } catch (_) {} return; }
+      rec = new SR();
+      rec.lang = 'en-US';
+      rec.interimResults = true;
+      rec.continuous = false;
+      baseText = target.value;
+
+      rec.onstart = () => { listening = true; btn.classList.add('listening'); };
+      rec.onresult = e => {
+        let txt = '';
+        for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+        target.value = (baseText ? baseText.replace(/\s+$/, '') + ' ' : '') + txt;
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      rec.onerror = () => {};
+      rec.onend = () => { listening = false; btn.classList.remove('listening'); target.focus(); };
+      try { rec.start(); } catch (_) {}
+    });
+  });
 }
 
 init();

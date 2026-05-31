@@ -1822,7 +1822,6 @@ body {
   width: 100%;
   resize: none;
   transition: border-color 0.2s;
-  display: none;
 }
 #contentTextarea::placeholder { color: var(--text-sub); }
 #contentTextarea:focus { border-color: rgba(255,255,255,0.3); }
@@ -4391,3 +4390,147 @@ body {
   padding: 4px 10px; cursor: pointer; font-family: inherit; transition: background 0.15s;
 }
 .try-on-stop:hover { background: rgba(167,139,250,0.25); }
+
+/* ══════════════════════════════════════════════════════════════
+   SPEECH-TO-TEXT (mic buttons)
+══════════════════════════════════════════════════════════════ */
+.field-with-mic { position: relative; display: block; }
+.field-with-mic input,
+.field-with-mic textarea { padding-right: 44px; }
+
+.mic-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border-med);
+  color: var(--text-sub);
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+  transition: color 0.2s, background 0.2s, border-color 0.2s, transform 0.15s;
+}
+.mic-btn:hover { color: var(--text); background: var(--card-hover); }
+/* mic inside a modal/task field overlays the right edge */
+.field-with-mic .mic-btn { position: absolute; right: 7px; top: 7px; }
+/* chat row mic sits inline before the send button */
+.chat-mic-btn { width: 40px; height: 40px; }
+
+.mic-btn.listening {
+  color: #fff;
+  background: #ef4444;
+  border-color: #ef4444;
+  animation: micPulse 1.1s ease-in-out infinite;
+}
+@keyframes micPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+  50%     { box-shadow: 0 0 0 7px rgba(239,68,68,0); transform: scale(1.06); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MOOD PICKER
+══════════════════════════════════════════════════════════════ */
+.mood-picker { display: flex; gap: 6px; }
+.mood-picker.hidden { display: none; }
+.mood-chip {
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer; font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.mood-chip:hover { background: var(--card-hover); }
+.mood-chip .mood-emoji { font-size: 1.15rem; line-height: 1; }
+.mood-chip .mood-label { font-size: 0.6rem; color: var(--text-sub); letter-spacing: 0.02em; }
+.mood-chip.selected {
+  border-color: var(--mood);
+  background: color-mix(in srgb, var(--mood) 16%, transparent);
+  transform: translateY(-1px);
+}
+.mood-chip.selected .mood-label { color: var(--text); }
+
+/* ══════════════════════════════════════════════════════════════
+   JOURNAL — upgraded
+══════════════════════════════════════════════════════════════ */
+.journal-stats {
+  display: flex; gap: 8px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.journal-stat {
+  flex: 1;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 1px solid var(--border-med);
+  border-radius: 14px;
+  padding: 11px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.journal-stat-num { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+.journal-stat-lbl { font-size: 0.62rem; color: var(--text-sub); letter-spacing: 0.03em; }
+
+.journal-prompt {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  background: color-mix(in srgb, var(--purple) 9%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--purple) 22%, var(--border));
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  cursor: pointer; text-align: left;
+  font-family: inherit;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+.journal-prompt:hover { background: color-mix(in srgb, var(--purple) 16%, var(--card)); }
+.journal-prompt-icon { color: #a78bfa; font-size: 0.9rem; flex-shrink: 0; }
+.journal-prompt-text { flex: 1; font-size: 0.82rem; color: var(--text); line-height: 1.4; }
+.journal-prompt-refresh {
+  color: var(--text-sub); font-size: 1rem; flex-shrink: 0;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.2s, background 0.2s, transform 0.3s;
+}
+.journal-prompt-refresh:hover { color: var(--text); background: rgba(255,255,255,0.08); transform: rotate(90deg); }
+
+.journal-reflection {
+  display: flex; align-items: flex-start; gap: 9px;
+  background: color-mix(in srgb, #f472b6 8%, var(--card));
+  border: 1px solid color-mix(in srgb, #f472b6 24%, var(--border));
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  animation: slideIn 0.2s ease;
+  flex-shrink: 0;
+}
+.journal-reflection.hidden { display: none; }
+.journal-reflection-blob { font-size: 1rem; flex-shrink: 0; }
+.journal-reflection-text { font-size: 0.82rem; color: var(--text); line-height: 1.5; font-style: italic; }
+
+.journal-list { overflow-y: auto; }
+.journal-day-sep {
+  list-style: none;
+  font-size: 0.66rem; color: var(--text-sub);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 10px 2px 3px; font-weight: 600;
+}
+.journal-day-sep:first-child { padding-top: 0; }
+
+.journal-entry {
+  position: relative;
+  border-left: 3px solid var(--accent, rgba(255,255,255,0.12));
+}
+.journal-entry-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 4px;
+}
+.journal-mood {
+  font-size: 0.66rem;
+  color: var(--text);
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mood) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mood) 40%, transparent);
+  letter-spacing: 0.02em;
+}

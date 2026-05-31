@@ -295,6 +295,7 @@ def _create_app_tables(c):
             'ALTER TABLE habits ADD COLUMN longest_streak INTEGER DEFAULT 0',
             'ALTER TABLE habits ADD COLUMN paused INTEGER DEFAULT 0',
             'ALTER TABLE habits ADD COLUMN history TEXT DEFAULT "[]"',
+            'ALTER TABLE journal ADD COLUMN mood TEXT DEFAULT ""',
         ]:
             try:
                 c.execute(migration)
@@ -344,6 +345,7 @@ def _create_app_tables(c):
         c.execute('''CREATE TABLE IF NOT EXISTS journal (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             text TEXT NOT NULL,
+            mood TEXT DEFAULT '',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )''')
         c.execute('''CREATE TABLE IF NOT EXISTS nav_life_areas (
@@ -1340,13 +1342,46 @@ def list_journal():
 def add_journal():
     d = request.json or {}
     text = (d.get('text') or '').strip()
+    mood = (d.get('mood') or '').strip()[:20]
     if not text:
         return jsonify(error='empty text'), 400
     with db() as c:
-        cur = c.execute('INSERT INTO journal (text) VALUES (?)', (text,))
+        cur = c.execute('INSERT INTO journal (text, mood) VALUES (?,?)', (text, mood))
         c.commit()
         entry = dict(c.execute('SELECT * FROM journal WHERE id=?', (cur.lastrowid,)).fetchone())
     return jsonify(entry), 201
+
+
+@app.route('/api/journal/reflect', methods=['POST'])
+def journal_reflect():
+    """Tiny supportive reflection from the blob on a fresh journal entry.
+    Always 200 with a (possibly empty) reflection — never blocks saving."""
+    d = request.json or {}
+    text = (d.get('text') or '').strip()
+    mood = (d.get('mood') or '').strip()
+    if not text or not GROQ_KEY:
+        return jsonify(reflection='')
+    mood_note = f" The writer tagged their mood as '{mood}'." if mood else ''
+    prompt = (
+        "You are a warm, gentle blob companion reading someone's private journal entry."
+        f"{mood_note} Respond with ONE short caring sentence (max 18 words) that reflects "
+        "back what you noticed and offers gentle support or encouragement. No advice lists, "
+        "no quotes, no emojis. Just speak softly like a kind friend.\n\n"
+        f"Journal entry:\n{text[:1200]}"
+    )
+    try:
+        resp = _groq().chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.7,
+            max_completion_tokens=80,
+            stream=False,
+        )
+        log_usage(resp, 'journal_reflect')
+        return jsonify(reflection=_clean(resp.choices[0].message.content or ''))
+    except Exception as exc:
+        log.error('journal reflect error: %s', exc)
+        return jsonify(reflection='')
 
 
 @app.route('/api/journal/<int:jid>', methods=['DELETE'])
