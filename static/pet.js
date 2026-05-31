@@ -1,3 +1,18 @@
+// ── Auth guard ────────────────────────────────────────────────────────────────
+// If the session expires (or is missing), any /api call returns 401 — bounce to login.
+(function () {
+  const _fetch = window.fetch;
+  window.fetch = function (...args) {
+    return _fetch.apply(this, args).then((res) => {
+      if (res.status === 401) {
+        const url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url) || '';
+        if (url.includes('/api/')) window.location.href = '/login';
+      }
+      return res;
+    });
+  };
+})();
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Blob companion — AI reactions, familiarity / energy / happiness
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2976,6 +2991,37 @@ document.getElementById('resetPetBtn').addEventListener('click', async () => {
   await fetch('/api/settings/reset-pet', { method: 'POST' });
   await loadPet();
   showToast('pet stats reset');
+});
+
+// ── Account ───────────────────────────────────────────────────────────────────
+// Show the signed-in email under the log-out row.
+fetch('/api/auth/me')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((d) => {
+    if (d && d.email) {
+      const el = document.getElementById('logoutEmail');
+      if (el) el.textContent = d.email;
+    }
+  })
+  .catch(() => {});
+
+const logoutBtn = document.getElementById('logoutBtn');
+if (logoutBtn) logoutBtn.addEventListener('click', async () => {
+  if (!confirm('Log out of your account?')) return;
+  try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+  window.location.href = '/login';
+});
+
+// ── Cross-device sync ─────────────────────────────────────────────────────────
+// Your data lives on the server per account, so it's already shared across
+// devices. When you switch back to this tab, pull the latest so changes made on
+// another device show up here.
+let _lastFocusSync = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - _lastFocusSync > 3000) {
+    _lastFocusSync = Date.now();
+    Promise.all([loadTasks(), loadPet(), loadHabits(), loadGoals()]).catch(() => {});
+  }
 });
 
 // ── AI Usage ──────────────────────────────────────────────────────────────────

@@ -5,8 +5,10 @@ import random
 import json
 import logging
 import threading
-from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+import secrets
+from datetime import datetime, timedelta
+from flask import Flask, render_template, jsonify, request, session, redirect
+from werkzeug.security import generate_password_hash, check_password_hash
 from groq import Groq
 
 logging.basicConfig(level=logging.INFO)
@@ -59,6 +61,42 @@ _IS_PG    = bool(_DB_URL)
 if _IS_PG:
     import psycopg2
     import psycopg2.extras
+
+# ── Auth / session config ──────────────────────────────────────────────────────
+# Each user's data lives in its own private store so accounts never see each
+# other's tasks/pet/etc. In production that's a dedicated PostgreSQL schema
+# ("u_<id>"); in local dev it's a dedicated SQLite file ("data/u_<id>.db").
+# The shared users table lives in the "system" store (public schema / auth.db).
+USER_DATA_DIR = 'data'      # local SQLite: one DB file per user
+AUTH_DB_PATH  = 'auth.db'   # local SQLite: shared users table
+
+
+def _load_secret_key():
+    """Stable signing key for session cookies.
+    Production MUST set SECRET_KEY (so logins survive restarts & multiple workers).
+    Local dev falls back to a key persisted in .secret_key."""
+    key = os.getenv('SECRET_KEY')
+    if key:
+        return key
+    try:
+        if os.path.exists('.secret_key'):
+            with open('.secret_key') as f:
+                return f.read().strip()
+        key = secrets.token_hex(32)
+        with open('.secret_key', 'w') as f:
+            f.write(key)
+        return key
+    except Exception:
+        return secrets.token_hex(32)
+
+
+app.secret_key = _load_secret_key()
+app.permanent_session_lifetime = timedelta(days=30)   # "stay logged in" across sessions
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=_IS_PG,   # production is served over HTTPS
+)
 
 _INSERT_RE = re.compile(r'^\s*INSERT\b', re.I)
 _CREATE_RE = re.compile(r'^\s*CREATE\b', re.I)
@@ -142,12 +180,19 @@ class _Cursor:
 
 
 class _Conn:
-    def __init__(self):
+    def __init__(self, schema=None, sqlite_path=None, autocommit=False):
         if _IS_PG:
             self._raw = psycopg2.connect(_DB_URL)
+            if autocommit:
+                self._raw.autocommit = True
             self._factory = psycopg2.extras.RealDictCursor
+            if schema:
+                # Scope every statement on this connection to the user's schema.
+                cur = self._raw.cursor()
+                cur.execute(f'SET search_path TO "{schema}", public')
+                cur.close()
         else:
-            self._raw = sqlite3.connect(DB_PATH)
+            self._raw = sqlite3.connect(sqlite_path or DB_PATH)
             self._raw.row_factory = sqlite3.Row
             self._factory = None
 
@@ -169,13 +214,31 @@ class _Conn:
         except Exception: pass
 
 
+def _user_conn(uid, autocommit=False):
+    """Connection scoped to one user's private data store."""
+    if _IS_PG:
+        return _Conn(schema=f'u_{int(uid)}', autocommit=autocommit)
+    return _Conn(sqlite_path=os.path.join(USER_DATA_DIR, f'u_{int(uid)}.db'))
+
+
+def sysdb():
+    """Connection to the shared system store that holds the users table."""
+    if _IS_PG:
+        return _Conn(schema=None)
+    return _Conn(sqlite_path=AUTH_DB_PATH)
+
+
 def db():
-    return _Conn()
+    """Connection scoped to the currently logged-in user (set by the auth gate)."""
+    uid = session.get('uid')
+    if not uid:
+        raise RuntimeError('db() called without an authenticated user')
+    return _user_conn(uid)
 
 
 
-def init_db():
-    with db() as c:
+def _create_app_tables(c):
+    if True:
         c.execute('''CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -329,6 +392,37 @@ def init_db():
         c.commit()
 
 
+def init_system():
+    """Create the shared users table. Runs once at import."""
+    if not _IS_PG:
+        os.makedirs(USER_DATA_DIR, exist_ok=True)
+    with sysdb() as c:
+        c.execute('''CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )''')
+        c.commit()
+
+
+def init_user_db(uid):
+    """Create (idempotently) all app tables + seeds inside a user's private store."""
+    if _IS_PG:
+        # autocommit so the idempotent ALTER-migrations can't poison the transaction
+        c = _user_conn(uid, autocommit=True)
+        try:
+            c.execute(f'CREATE SCHEMA IF NOT EXISTS "u_{int(uid)}"')
+            _create_app_tables(c)
+        finally:
+            try: c._raw.close()
+            except Exception: pass
+    else:
+        os.makedirs(USER_DATA_DIR, exist_ok=True)
+        with _user_conn(uid) as c:
+            _create_app_tables(c)
+
+
 def log_usage(resp, call_type: str):
     """Log token usage from a Groq completion response to ai_usage table."""
     try:
@@ -386,6 +480,87 @@ def get_usage():
 def pet_with_level(pet_dict):
     pet_dict['level'] = min(10, pet_dict['total_completed'] // 5 + 1)
     return pet_dict
+
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+# Reachable without a session. Everything else requires login.
+_PUBLIC_PATHS = {'/login', '/api/auth/login', '/api/auth/register', '/api/auth/me'}
+
+
+def _norm_email(e):
+    return (e or '').strip().lower()
+
+
+@app.before_request
+def _auth_gate():
+    p = request.path
+    if p.startswith('/static/') or p in _PUBLIC_PATHS:
+        return
+    if session.get('uid'):
+        return
+    if p.startswith('/api/'):
+        return jsonify(error='authentication required'), 401
+    return redirect('/login')
+
+
+@app.route('/login')
+def login_page():
+    if session.get('uid'):
+        return redirect('/')
+    return render_template('login.html')
+
+
+@app.route('/api/auth/register', methods=['POST'])
+def auth_register():
+    d = request.json or {}
+    email = _norm_email(d.get('email'))
+    pw    = d.get('password') or ''
+    if not _EMAIL_RE.match(email):
+        return jsonify(error='enter a valid email'), 400
+    if len(pw) < 6:
+        return jsonify(error='password must be at least 6 characters'), 400
+    with sysdb() as c:
+        if c.execute('SELECT id FROM users WHERE email=?', (email,)).fetchone():
+            return jsonify(error='that email is already registered'), 409
+        cur = c.execute('INSERT INTO users (email, password_hash) VALUES (?,?)',
+                        (email, generate_password_hash(pw)))
+        c.commit()
+        uid = cur.lastrowid
+    init_user_db(uid)            # build this account's private data store
+    session.permanent = True
+    session['uid']   = uid
+    session['email'] = email
+    return jsonify(ok=True, email=email)
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    d = request.json or {}
+    email = _norm_email(d.get('email'))
+    pw    = d.get('password') or ''
+    with sysdb() as c:
+        row = c.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
+    if not row or not check_password_hash(row['password_hash'], pw):
+        return jsonify(error='wrong email or password'), 401
+    init_user_db(row['id'])      # ensure their store exists (idempotent)
+    session.permanent = True
+    session['uid']   = row['id']
+    session['email'] = email
+    return jsonify(ok=True, email=email)
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    session.clear()
+    return jsonify(ok=True)
+
+
+@app.route('/api/auth/me')
+def auth_me():
+    if session.get('uid'):
+        return jsonify(authenticated=True, email=session.get('email'))
+    return jsonify(authenticated=False), 401
 
 
 @app.route('/')
@@ -2452,7 +2627,7 @@ def reset_pet():
         pet = pet_with_level(dict(c.execute('SELECT * FROM pet WHERE id=1').fetchone()))
     return jsonify(pet)
 
-init_db()
+init_system()
 
 if __name__ == '__main__':
     app.run(debug=True, port=5002)

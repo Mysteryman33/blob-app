@@ -28,9 +28,24 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Open `http://localhost:5000`. The database (`tasks.db`) is created automatically on first run.
+Open `http://localhost:5000`. You'll land on a sign-in page — create an account and your blob is waiting. Each account gets its own private data, created automatically on first login.
 
 **API key** — set `GROQ_API_KEY` as an environment variable, or edit `GROQ_KEY` in `main.py`.
+
+### accounts & sync
+
+Sign in with an email + password. Your data lives on the server tied to your account, so:
+
+- it **persists across sessions** (you stay logged in for 30 days)
+- it **syncs across devices** — log in on your phone and laptop and you see the same blob (switch back to a tab and it pulls the latest)
+
+**Environment variables for production:**
+
+| Var | Purpose |
+|---|---|
+| `SECRET_KEY` | **Required in production.** Signs the login cookie. Set it to a long random string (e.g. `python -c "import secrets; print(secrets.token_hex(32))"`). If it changes, everyone gets logged out — so set it once and keep it stable. |
+| `DATABASE_URL` | Postgres connection string. Each user's data is isolated in its own schema (`u_<id>`); the shared `users` table lives in `public`. Without it, local dev uses one SQLite file per user under `data/`. |
+| `GROQ_API_KEY` | For the AI blob chat / reactions. |
 
 ---
 
@@ -144,7 +159,7 @@ tasks.db             — SQLite database (auto-created)
 
 ## database
 
-14 tables: `tasks` · `pet` · `shop_owned` · `habits` · `goals` · `goal_milestones` · `goal_habit_links` · `journal` · `notes` · `focus_sessions` · `budget` · `nav_life_areas` · `nav_identity` · `nav_career_paths` · `nav_passions`
+A shared `users` table (email + hashed password) handles auth. Every other table is created **per account** inside that user's private store: `tasks` · `pet` · `shop_owned` · `habits` · `goals` · `goal_milestones` · `goal_habit_links` · `journal` · `notes` · `focus_sessions` · `budget` · `nav_life_areas` · `nav_identity` · `nav_career_paths` · `nav_passions`
 
 ---
 
