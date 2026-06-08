@@ -43,11 +43,12 @@
           <span id="speech">...</span>
         </div>
 
-        <!-- Today's tasks card -->
+        <!-- Today card — tasks + daily habits -->
         <div class="card home-today-card">
           <div class="home-today-head">
             <div>
-              <div class="home-section-label">today's tasks</div>
+              <div class="home-section-label">today</div>
+              <div class="home-today-sub" id="homeTodaySub">—</div>
             </div>
             <div class="home-ring-wrap">
               <svg width="56" height="56" viewBox="0 0 56 56">
@@ -69,10 +70,23 @@
               </div>
             </div>
           </div>
+
+          <!-- Tasks section -->
+          <div class="home-list-sep-label">
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="2.5" stroke="currentColor" stroke-width="1.5"/><polyline points="3.5 6 5 7.5 8.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            tasks
+          </div>
           <ul class="task-list" id="taskList">
             <li class="empty-state">no tasks yet — add one!</li>
           </ul>
           <span id="taskCount" style="display:none"></span>
+
+          <!-- Daily habits section -->
+          <div class="home-list-sep-label home-list-sep-habits" id="habitSectionSep" style="display:none">
+            <svg width="9" height="12" viewBox="0 0 13 17" fill="#f97316"><path d="M6.5 0C6.5 0 10 5 10 8.5C10 10.4 8.4 12 6.5 12C4.6 12 3 10.4 3 8.5C3 6.8 3.8 5.5 3.8 5.5C3.8 5.5 4.3 6.8 5.5 6.8C5.5 6.8 4.8 4.8 6.5 0Z"/></svg>
+            daily habits
+          </div>
+          <ul class="task-list habit-daily-list" id="habitDailyList" style="display:none"></ul>
         </div>
 
         <!-- Stats strip -->

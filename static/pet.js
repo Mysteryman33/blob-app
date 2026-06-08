@@ -586,12 +586,15 @@ const taskListEl  = document.getElementById('taskList');
 const taskCountEl = document.getElementById('taskCount');
 let tasks = [];
 
-function renderTasks() {
-  const done  = tasks.filter(t => t.done).length;
-  const total = tasks.length;
-  if (taskCountEl) taskCountEl.textContent = `${done}/${total} tasks`;
+function updateTodayRing() {
+  const today        = new Date().toISOString().slice(0, 10);
+  const activeHabits = (chatHabits || []).filter(h => !h.paused);
+  const habitsDone   = activeHabits.filter(h => h.last_done && h.last_done.slice(0, 10) === today).length;
+  const tasksDone    = tasks.filter(t => t.done).length;
+  const tasksTotal   = tasks.length;
+  const total        = tasksTotal + activeHabits.length;
+  const done         = tasksDone + habitsDone;
 
-  // Progress ring
   const arc = document.getElementById('homeProgressArc');
   if (arc) {
     const circ = 138.2;
@@ -599,8 +602,60 @@ function renderTasks() {
   }
   const doneEl  = document.getElementById('homeTasksDone');
   const totalEl = document.getElementById('homeTasksTotal');
-  if (doneEl)  doneEl.textContent  = done;
+  if (doneEl)  doneEl.textContent = done;
   if (totalEl) totalEl.textContent = total;
+  if (taskCountEl) taskCountEl.textContent = `${tasksDone}/${tasksTotal} tasks`;
+
+  const sub = document.getElementById('homeTodaySub');
+  if (sub) {
+    const tl = tasksTotal === 1 ? '1 task' : `${tasksTotal} tasks`;
+    const hl = activeHabits.length === 1 ? '1 habit' : `${activeHabits.length} habits`;
+    sub.textContent = `${tl} · ${hl}`;
+  }
+}
+
+function renderHomeDailyHabits() {
+  const listEl = document.getElementById('habitDailyList');
+  const sepEl  = document.getElementById('habitSectionSep');
+  if (!listEl || !sepEl) return;
+
+  const today  = new Date().toISOString().slice(0, 10);
+  const active = (chatHabits || []).filter(h => !h.paused);
+
+  if (!active.length) {
+    listEl.style.display = 'none';
+    sepEl.style.display  = 'none';
+    updateTodayRing();
+    return;
+  }
+
+  listEl.style.display = '';
+  sepEl.style.display  = '';
+
+  const sorted = [...active].sort((a, b) => {
+    const ad = a.last_done && a.last_done.slice(0, 10) === today ? 1 : 0;
+    const bd = b.last_done && b.last_done.slice(0, 10) === today ? 1 : 0;
+    return ad - bd;
+  });
+
+  listEl.innerHTML = sorted.map(h => {
+    const done        = h.last_done && h.last_done.slice(0, 10) === today;
+    const streakCls   = h.streak > 0 ? '' : ' no-streak';
+    const streakTxt   = h.streak > 0 ? `${h.streak}d` : 'new';
+    return `<li class="task-item habit-daily-item${done ? ' done' : ''}" data-habit-id="${h.id}">
+      <button class="task-toggle" aria-label="${done ? 'Uncheck' : 'Check in'}"></button>
+      <div class="task-main">
+        <span class="task-title">${esc(h.title)}</span>
+        <span class="habit-streak-badge${streakCls}">${streakTxt}</span>
+      </div>
+    </li>`;
+  }).join('');
+
+  updateTodayRing();
+}
+
+function renderTasks() {
+  updateTodayRing();
 
   if (!tasks.length) {
     taskListEl.innerHTML = '<li class="empty-state">no tasks yet — add one!</li>';
@@ -647,13 +702,20 @@ taskListEl.addEventListener('click', async e => {
   // Toggle — tap anywhere on the row (big, mobile-friendly target) to check/uncheck
   const item = e.target.closest('.task-item');
   if (!item || !item.dataset.taskId) return;
-  const id = item.dataset.taskId;
+  const id = parseInt(item.dataset.taskId);
   attractToEdge(item.querySelector('.task-toggle'), 'left', 1200);
+
+  // Optimistic update — flip visually before the server responds
+  const prev = tasks.find(t => t.id === id);
+  if (!prev) return;
+  tasks = tasks.map(t => t.id === id ? { ...t, done: !prev.done } : t);
+  renderTasks();
+
   try {
     const res  = await fetch(`/api/tasks/${id}`, { method: 'PATCH' });
     const data = await res.json();
-    if (!data || !data.task) return;
-    tasks = tasks.map(t => t.id === parseInt(id) ? data.task : t);
+    if (!data || !data.task) throw new Error('bad response');
+    tasks = tasks.map(t => t.id === id ? data.task : t);
     updatePetUI(data.pet);
     renderTasks();
     if (data.task.done) {
@@ -663,7 +725,10 @@ taskListEl.addEventListener('click', async e => {
       addNotif('task_undone', `"${data.task.title}" uncompleted`);
       react('idle');
     }
-  } catch (e) {}
+  } catch (e) {
+    tasks = tasks.map(t => t.id === id ? prev : t);
+    renderTasks();
+  }
 });
 
 taskForm.addEventListener('submit', async e => {
@@ -684,6 +749,41 @@ taskForm.addEventListener('submit', async e => {
     react('task_added');
     scheduleNextRest(600);
   } catch (e) {}
+});
+
+// ── Daily habit check (home screen) ──────────────────────────────────────────
+document.getElementById('habitDailyList').addEventListener('click', async e => {
+  const item = e.target.closest('.habit-daily-item');
+  if (!item || !item.dataset.habitId) return;
+  const hid   = parseInt(item.dataset.habitId);
+  const today = new Date().toISOString().slice(0, 10);
+  const habit = (chatHabits || []).find(h => h.id === hid);
+  if (!habit) return;
+
+  const doneToday = habit.last_done && habit.last_done.slice(0, 10) === today;
+  const endpoint  = doneToday ? `/api/habits/${hid}/uncheck` : `/api/habits/${hid}/check`;
+
+  // Optimistic update
+  const prevHabits = chatHabits;
+  chatHabits = chatHabits.map(h => h.id === hid ? { ...h, last_done: doneToday ? null : today } : h);
+  renderHomeDailyHabits();
+
+  try {
+    const res  = await fetch(endpoint, { method: 'POST' });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    chatHabits = chatHabits.map(h => h.id === hid ? (data.habit || data) : h);
+    if (data.pet) updatePetUI(data.pet);
+    renderHomeDailyHabits();
+    renderHomeHabits();
+    if (!doneToday) {
+      addNotif('habit_checked', `"${habit.title}" checked in`);
+      react('habit_checked');
+    }
+  } catch (_) {
+    chatHabits = prevHabits;
+    renderHomeDailyHabits();
+  }
 });
 
 // ── Feed ──────────────────────────────────────────────────────────────────────
@@ -1352,6 +1452,7 @@ async function loadHabits() {
     chatHabits      = habits;
     lastHabitStreak = streak;
     renderHomeHabits();
+    renderHomeDailyHabits();
     const el = document.getElementById('habitsList');
     const today  = new Date().toISOString().slice(0,10);
 

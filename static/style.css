@@ -3963,6 +3963,63 @@ body {
   font-size: 13px; font-weight: 700; color: #f59e0b;
 }
 
+/* Today sub-label */
+.home-today-sub {
+  font-size: 10.5px;
+  color: var(--text-sub);
+  margin-top: 2px;
+  opacity: 0.7;
+}
+
+/* Section separator labels inside today card */
+.home-list-sep-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 0 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  opacity: 0.5;
+}
+.home-list-sep-habits {
+  border-top: 1px solid rgba(255,255,255,0.05);
+  margin-top: 6px;
+  padding-top: 10px;
+}
+
+/* Habit rows in today card */
+.habit-daily-item .task-toggle {
+  border-color: rgba(249,115,22,0.3);
+}
+.habit-daily-item .task-toggle:hover {
+  border-color: rgba(249,115,22,0.55);
+  background: rgba(249,115,22,0.08);
+}
+.habit-daily-item.done .task-toggle {
+  background: linear-gradient(135deg, #c2410c, #f97316) !important;
+  border-color: transparent !important;
+  box-shadow: 0 0 8px rgba(249,115,22,0.4) !important;
+}
+.habit-streak-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #f97316;
+  background: rgba(249,115,22,0.1);
+  border: 1px solid rgba(249,115,22,0.2);
+  border-radius: 99px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.habit-streak-badge.no-streak {
+  color: var(--text-sub);
+  background: transparent;
+  border-color: transparent;
+}
+
 /* ════════════════ HEART SCREEN ════════════════ */
 
 .heart-coins-display {
